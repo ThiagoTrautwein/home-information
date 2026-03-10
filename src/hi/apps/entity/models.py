@@ -90,49 +90,44 @@ class Entity( IntegrationDetailsModel, LocationItemModelMixin ):
         return
 
     def get_attribute_map(self):
-        attribute_map = dict()
-        for attribute in self.get_attribute_owner().attributes.all():
-            attribute_map[attribute.name] = attribute
-            continue
-        return attribute_map
+        return {
+            attr.name: attr
+            for attr in self.attribute_owner.attributes.all()
+        }
 
     @property
-    def is_clone(self) -> bool:
-        return bool(self.get_clone_link())
-
-    def get_clone_link(self) -> Optional['EntityCloneLink']:
+    def clone(self) -> Optional["EntityCloneLink"]:
         try:
             return self.clone_link
         except EntityCloneLink.DoesNotExist:
             return None
-
-    def get_attribute_owner(self) -> 'Entity':
-        clone_link = self.get_clone_link()
-        if clone_link:
-            return clone_link.source_entity
+        
+    @property
+    def is_clone(self) -> bool:
+        return self.clone is not None
+    
+    @property
+    def attribute_owner(self) -> "Entity":
+        clone = self.clone
+        if clone:
+            return clone.source_entity
         return self
 
-    def get_state_owner(self) -> 'Entity':
-        clone_link = self.get_clone_link()
-        if clone_link and clone_link.share_states:
-            return clone_link.source_entity
+    @property
+    def state_owner(self) -> "Entity":
+        clone = self.clone
+        if clone and clone.share_states:
+            return clone.source_entity
         return self
 
-    def get_clones(self):
-        """Return all entities that are clones of this entity."""
-        return Entity.objects.filter(
-            clone_link__source_entity=self,
-        )
+    @property
+    def clones(self):
+        return Entity.objects.filter(clone_link__source_entity=self)
 
     def delete(self, *args, **kwargs):
-        """Override delete to cascade-delete clones when a source entity is deleted.
-
-        Clone entities that lose their source would be left without shared
-        attributes or states.  Deleting them prevents orphaned records.
-        """
-        # Delete clone entities first (their cascade will remove the link rows).
-        for clone in self.get_clones():
+        for clone in self.clones:
             clone.delete(*args, **kwargs)
+
         return super().delete(*args, **kwargs)
 
 
@@ -141,42 +136,31 @@ class EntityCloneLink(models.Model):
 
     source_entity = models.ForeignKey(
         Entity,
-        related_name='clone_links_as_source',
-        verbose_name='Source Entity',
-        on_delete=models.CASCADE,
+        verbose_name = 'Source Entity',
+        on_delete = models.CASCADE,
     )
     clone_entity = models.OneToOneField(
         Entity,
         related_name='clone_link',
-        verbose_name='Clone Entity',
-        on_delete=models.CASCADE,
+        verbose_name = 'Clone Entity',
+        on_delete = models.CASCADE,
     )
     share_states = models.BooleanField(
         'Share States?',
-        default=True,
+        default = True,
     )
     created_datetime = models.DateTimeField(
         'Created',
-        auto_now_add=True,
+        auto_now_add = True,
     )
 
     class Meta:
         verbose_name = 'Entity Clone Link'
         verbose_name_plural = 'Entity Clone Links'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['source_entity', 'clone_entity'],
-                name='entity_clone_link_source_clone_unique',
-            ),
-            models.CheckConstraint(
-                check=~Q(source_entity=F('clone_entity')),
-                name='entity_clone_link_no_self_clone',
-            ),
-        ]
 
     def __str__(self):
         return (
-            f'Clone[{self.clone_entity_id}] -> Source[{self.source_entity_id}] '
+            f'Clone[{self.clone_entity.id}] -> Source[{self.source_entity.id}] '
             f'(share_states={self.share_states})'
         )
 
