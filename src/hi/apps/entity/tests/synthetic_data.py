@@ -160,7 +160,8 @@ class EntityAttributeSyntheticData:
         form_data.update(overrides)
         
         # Add formset data for regular attributes (non-file attributes)
-        regular_attributes = list(entity.attributes.exclude(
+        attribute_owner = entity.get_attribute_owner()
+        regular_attributes = list(attribute_owner.attributes.exclude(
             value_type_str=str(AttributeValueType.FILE)
         ).order_by('id'))
         
@@ -212,8 +213,9 @@ class EntityAttributeSyntheticData:
     def create_file_title_update_data(entity: Entity, file_attributes: List[EntityAttribute]) -> Dict[str, str]:
         """Create POST data for file title updates."""
         data = {}
+        attribute_owner = entity.get_attribute_owner()
         for attr in file_attributes:
-            field_name = f'file_title_{entity.id}_{attr.id}'
+            field_name = f'file_title_{attribute_owner.id}_{attr.id}'
             data[field_name] = f'Updated {attr.name}'
         return data
     

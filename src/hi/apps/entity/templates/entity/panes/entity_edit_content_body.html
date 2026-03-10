@@ -5,41 +5,56 @@ Extends the generic attribute edit content body with entity-specific field layou
 {% endcomment %}
 
 {% block owner_fields %}
+<!-- Clone indicator banner -->
+{% if entity.is_clone %}
+<div class="alert alert-info py-1 px-2 mb-2 d-flex align-items-center" style="font-size: 0.85em;">
+  <span class="mr-2">🔗</span>
+  <span>
+    Clone of <strong>{{ entity.get_clone_link.source_entity.name }}</strong>
+    — attributes are shared.
+    {% if entity.get_clone_link.share_states %}States are also shared.{% endif %}
+  </span>
+</div>
+{% elif entity.get_clones.count > 0 %}
+<div class="alert alert-secondary py-1 px-2 mb-2 d-flex align-items-center" style="font-size: 0.85em;">
+  <span class="mr-2">📋</span>
+  <span>
+    Source entity with <strong>{{ entity.get_clones.count }}</strong>
+    clone{{ entity.get_clones.count|pluralize }}.
+  </span>
+</div>
+{% endif %}
+
 <!-- Entity-specific fields: Name and Type fields for modal editing -->
 <div class="row">
   <div class="col-md-8">
     <div class="form-group mb-0">
       <small class="text-muted">Name</small>
-      <input type="text" 
-             id="{{ owner_form.name.id_for_label }}"
-             name="{{ owner_form.name.html_name }}"
-             value="{{ owner_form.name.value|default:'' }}"
-             class="form-control form-control-sm"
-             {% if owner_form.name.field.required %}required{% endif %}>
+      <input type="text" id="{{ owner_form.name.id_for_label }}" name="{{ owner_form.name.html_name }}"
+        value="{{ owner_form.name.value|default:'' }}" class="form-control form-control-sm" {% if
+        owner_form.name.field.required %}required{% endif %}>
       {% if owner_form.name.errors %}
-        <div class="invalid-feedback d-block">
-          {{ owner_form.name.errors }}
-        </div>
+      <div class="invalid-feedback d-block">
+        {{ owner_form.name.errors }}
+      </div>
       {% endif %}
     </div>
   </div>
   <div class="col-md-4">
     <div class="form-group mb-0">
       <small class="text-muted">Type</small>
-      <select id="{{ owner_form.entity_type_str.id_for_label }}"
-              name="{{ owner_form.entity_type_str.html_name }}"
-              class="form-control form-control-sm">
+      <select id="{{ owner_form.entity_type_str.id_for_label }}" name="{{ owner_form.entity_type_str.html_name }}"
+        class="form-control form-control-sm">
         {% for value, label in owner_form.entity_type_str.field.choices %}
-          <option value="{{ value }}" 
-                  {% if value == owner_form.entity_type_str.value %}selected{% endif %}>
-            {{ label }}
-          </option>
+        <option value="{{ value }}" {% if value==owner_form.entity_type_str.value %}selected{% endif %}>
+          {{ label }}
+        </option>
         {% endfor %}
       </select>
       {% if owner_form.entity_type_str.errors %}
-        <div class="invalid-feedback d-block">
-          {{ owner_form.entity_type_str.errors }}
-        </div>
+      <div class="invalid-feedback d-block">
+        {{ owner_form.entity_type_str.errors }}
+      </div>
       {% endif %}
     </div>
   </div>

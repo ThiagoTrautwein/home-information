@@ -28,4 +28,8 @@ urlpatterns = [
     re_path( r'^properties/edit/(?P<entity_id>\d+)$', 
              views.EntityPropertiesEditView.as_view(), 
              name='entity_properties_edit'),
+
+    re_path( r'^clone/(?P<entity_id>\d+)$', 
+             views.EntityCloneView.as_view(), 
+             name='entity_clone'),
 ]

@@ -1,6 +1,8 @@
 import logging
+import math
 import re
-from typing import Any, Dict, Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import BadRequest, PermissionDenied
 from django.db import transaction
@@ -16,7 +18,7 @@ from hi.apps.entity.entity_manager import EntityManager
 from hi.apps.entity.entity_pairing_manager import EntityPairingManager, EntityPairingError
 from hi.apps.entity.edit.entity_type_transition_handler import EntityTypeTransitionHandler
 from hi.apps.entity.forms import EntityForm
-from hi.apps.entity.models import Entity, EntityPosition
+from hi.apps.entity.models import Entity, EntityCloneLink, EntityPosition
 from hi.apps.entity.view_mixins import EntityViewMixin
 from hi.apps.location.models import LocationView
 from hi.apps.location.location_manager import LocationManager
@@ -79,22 +81,46 @@ class EntityAddView( HiModalView ):
 
         with transaction.atomic():
             entity = entity_form.save()
+            clone_count = max( 1, entity_form.cleaned_data.get( 'clone_count' ) or 1 )
+            clone_share_states = bool( entity_form.cleaned_data.get( 'clone_share_states', True ))
+
+            entity_list = [ entity ]
+            if clone_count > 1:
+                for i in range( 1, clone_count ):
+                    clone_entity = Entity.objects.create(
+                        name = f'{entity.name} ({i+1})',
+                        entity_type_str = entity.entity_type_str,
+                        can_user_delete = entity.can_user_delete,
+                        has_video_stream = entity.has_video_stream,
+                    )
+                    EntityCloneLink.objects.create(
+                        source_entity = entity,
+                        clone_entity = clone_entity,
+                        share_states = clone_share_states,
+                    )
+                    entity_list.append( clone_entity )
+
             self._add_to_current_view_type(
                 request = request,
-                entity = entity,
+                entity_list = entity_list,
             )
             
         redirect_url = reverse('home')
         return self.redirect_response( request, redirect_url )
 
-    def _add_to_current_view_type( self, request, entity : Entity ):
+    def _add_to_current_view_type( self, request, entity_list : List[Entity] ):
         
         if request.view_parameters.view_type.is_location_view:
             try:
                 current_location_view = LocationManager().get_default_location_view( request = request )
-                EntityManager().add_entity_to_view(
-                    entity = entity,
+                for entity in entity_list:
+                    EntityManager().add_entity_to_view(
+                        entity = entity,
+                        location_view = current_location_view,
+                    )
+                self._position_in_grid(
                     location_view = current_location_view,
+                    entity_list = entity_list,
                 )
             except LocationView.DoesNotExist:
                 logger.warning( 'No current location view to add new entity to.')
@@ -102,16 +128,54 @@ class EntityAddView( HiModalView ):
         elif request.view_parameters.view_type.is_collection:
             try:
                 current_collection = CollectionManager().get_default_collection( request = request )
-                CollectionManager().add_entity_to_collection(
-                    entity = entity,
-                    collection = current_collection,
-                )
+                for entity in entity_list:
+                    CollectionManager().add_entity_to_collection(
+                        entity = entity,
+                        collection = current_collection,
+                    )
             except LocationView.DoesNotExist:
                 logger.warning( 'No current collection to add new entity to.')
             
         else:
             logger.warning( 'No valid current view type to add new entity to.')
 
+        return
+
+    def _position_in_grid( self,
+                           location_view : LocationView,
+                           entity_list   : List[Entity] ):
+        if len( entity_list ) <= 1:
+            return
+
+        view_box = location_view.svg_view_box
+        bounds = location_view.location.svg_position_bounds
+        center_x = float( view_box.x + ( view_box.width / 2.0 ))
+        center_y = float( view_box.y + ( view_box.height / 2.0 ))
+
+        spacing = max( min( float(view_box.width), float(view_box.height) ) * 0.08, 2.0 )
+        columns = max( 1, int( math.ceil( math.sqrt( len(entity_list) ))))
+        rows = int( math.ceil( len(entity_list) / columns ))
+
+        for idx, entity in enumerate( entity_list ):
+            row_idx = idx // columns
+            col_idx = idx % columns
+
+            x = center_x + ( col_idx - ( columns - 1 ) / 2.0 ) * spacing
+            y = center_y + ( row_idx - ( rows - 1 ) / 2.0 ) * spacing
+
+            x = min( max( x, float(bounds.min_x) ), float(bounds.max_x) )
+            y = min( max( y, float(bounds.min_y) ), float(bounds.max_y) )
+
+            entity_position = EntityPosition.objects.filter(
+                entity = entity,
+                location = location_view.location,
+            ).first()
+            if not entity_position:
+                continue
+
+            entity_position.svg_x = Decimal( str(x) )
+            entity_position.svg_y = Decimal( str(y) )
+            entity_position.save( update_fields = [ 'svg_x', 'svg_y', 'updated_datetime' ] )
         return
 
     
@@ -296,3 +360,132 @@ class EntityPropertiesEditView( View, EntityViewMixin ):
             },
             status = status_code,
         )
+
+
+@method_decorator( edit_required, name='dispatch' )
+class EntityCloneView( HiModalView, EntityViewMixin ):
+    """Create clones of an existing entity.
+
+    This allows users to create N shallow copies of an entity from its
+    edit sidebar, linking each clone to the source via EntityCloneLink.
+    """
+
+    def get_template_name( self ) -> str:
+        return 'entity/edit/modals/entity_clone.html'
+
+    def get( self, request, *args, **kwargs ):
+        entity = self.get_entity( request, *args, **kwargs )
+        context = {
+            'entity': entity,
+        }
+        return self.modal_response( request, context )
+
+    def post( self, request, *args, **kwargs ):
+        entity = self.get_entity( request, *args, **kwargs )
+
+        try:
+            clone_count = int( request.POST.get( 'clone_count', 1 ))
+            clone_count = max( 1, min( clone_count, 64 ))
+        except (TypeError, ValueError):
+            clone_count = 1
+
+        share_states = request.POST.get( 'clone_share_states' ) == 'true'
+
+        with transaction.atomic():
+            existing_clone_count = entity.get_clones().count()
+            clone_list: List[Entity] = []
+            for i in range( clone_count ):
+                seq = existing_clone_count + i + 2  # +2 because source is (1)
+                clone_entity = Entity.objects.create(
+                    name = f'{entity.name} ({seq})',
+                    entity_type_str = entity.entity_type_str,
+                    can_user_delete = entity.can_user_delete,
+                    has_video_stream = entity.has_video_stream,
+                )
+                EntityCloneLink.objects.create(
+                    source_entity = entity,
+                    clone_entity = clone_entity,
+                    share_states = share_states,
+                )
+                clone_list.append( clone_entity )
+
+            self._add_clones_to_current_view(
+                request = request,
+                source_entity = entity,
+                clone_list = clone_list,
+            )
+
+        redirect_url = reverse('home')
+        return self.redirect_response( request, redirect_url )
+
+    def _add_clones_to_current_view( self, request, source_entity: Entity,
+                                     clone_list: List[Entity] ):
+        if not request.view_parameters.view_type.is_location_view:
+            return
+
+        try:
+            current_location_view = LocationManager().get_default_location_view( request = request )
+        except LocationView.DoesNotExist:
+            logger.warning( 'No current location view to add clones to.' )
+            return
+
+        for clone in clone_list:
+            EntityManager().add_entity_to_view(
+                entity = clone,
+                location_view = current_location_view,
+            )
+
+        # Position clones in a grid near the source entity
+        all_entities = [source_entity] + clone_list
+        self._position_clones_near_source(
+            location_view = current_location_view,
+            source_entity = source_entity,
+            clone_list = clone_list,
+        )
+
+    def _position_clones_near_source( self, location_view: LocationView,
+                                      source_entity: Entity,
+                                      clone_list: List[Entity] ):
+        """Position new clones near the source entity on the location view."""
+        from decimal import Decimal
+
+        view_box = location_view.svg_view_box
+        bounds = location_view.location.svg_position_bounds
+        spacing = max( min( float(view_box.width), float(view_box.height) ) * 0.08, 2.0 )
+
+        # Find source position to use as anchor
+        source_position = EntityPosition.objects.filter(
+            entity = source_entity,
+            location = location_view.location,
+        ).first()
+
+        if source_position:
+            base_x = float( source_position.svg_x )
+            base_y = float( source_position.svg_y )
+        else:
+            base_x = float( view_box.x + view_box.width / 2.0 )
+            base_y = float( view_box.y + view_box.height / 2.0 )
+
+        columns = max( 1, int( math.ceil( math.sqrt( len(clone_list) ))))
+
+        for idx, clone in enumerate(clone_list):
+            row_idx = idx // columns
+            col_idx = idx % columns
+
+            x = base_x + ( col_idx + 1 ) * spacing
+            y = base_y + row_idx * spacing
+
+            x = min( max( x, float(bounds.min_x) ), float(bounds.max_x) )
+            y = min( max( y, float(bounds.min_y) ), float(bounds.max_y) )
+
+            entity_position = EntityPosition.objects.filter(
+                entity = clone,
+                location = location_view.location,
+            ).first()
+            if not entity_position:
+                continue
+
+            entity_position.svg_x = Decimal( str(x) )
+            entity_position.svg_y = Decimal( str(y) )
+            entity_position.save( update_fields = ['svg_x', 'svg_y', 'updated_datetime'] )
+

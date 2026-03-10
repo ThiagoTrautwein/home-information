@@ -21,6 +21,18 @@ class EntityForm( forms.ModelForm ):
         required = True,
         widget = forms.Select( attrs = { 'class' : 'custom-select' } ),
     )
+    clone_count = forms.IntegerField(
+        label = 'Quantity',
+        required = False,
+        min_value = 1,
+        max_value = 64,
+        initial = 1,
+    )
+    clone_share_states = forms.BooleanField(
+        label = 'Share state with clones',
+        required = False,
+        initial = True,
+    )
 
     
 class EntityAttributeForm( AttributeForm ):

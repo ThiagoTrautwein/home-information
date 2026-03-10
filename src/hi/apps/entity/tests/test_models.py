@@ -2,7 +2,7 @@ import json
 import logging
 from django.db import IntegrityError
 
-from hi.apps.entity.models import Entity, EntityAttribute, EntityState
+from hi.apps.entity.models import Entity, EntityAttribute, EntityCloneLink, EntityState
 from hi.apps.entity.enums import EntityType, EntityStateType
 from hi.apps.attribute.enums import AttributeValueType
 from hi.testing.base_test_case import BaseTestCase
@@ -438,3 +438,105 @@ class TestEntityState(BaseTestCase):
         self.assertFalse(EntityState.objects.filter(id=temp_state_id).exists())
         
         return
+
+
+class TestEntityClone(BaseTestCase):
+    """Tests for entity clone relationships and cascade behavior."""
+
+    def setUp(self):
+        super().setUp()
+        self.source = Entity.objects.create(
+            name='Source Entity',
+            entity_type_str=str(EntityType.LIGHT),
+            integration_id='source_001',
+            integration_name='test',
+        )
+        self.clone1 = Entity.objects.create(
+            name='Source Entity (2)',
+            entity_type_str=str(EntityType.LIGHT),
+        )
+        self.clone2 = Entity.objects.create(
+            name='Source Entity (3)',
+            entity_type_str=str(EntityType.LIGHT),
+        )
+        EntityCloneLink.objects.create(
+            source_entity=self.source,
+            clone_entity=self.clone1,
+            share_states=True,
+        )
+        EntityCloneLink.objects.create(
+            source_entity=self.source,
+            clone_entity=self.clone2,
+            share_states=False,
+        )
+
+    def test_get_clones_returns_correct_set(self):
+        """get_clones() should return only the direct clones of this entity."""
+        clones = list(self.source.get_clones())
+        self.assertEqual(len(clones), 2)
+        self.assertIn(self.clone1, clones)
+        self.assertIn(self.clone2, clones)
+
+        # Clones themselves should have no clones
+        self.assertEqual(self.clone1.get_clones().count(), 0)
+
+    def test_source_entity_deletion_cascades_to_clones(self):
+        """Deleting the source entity should also delete all its clones."""
+        source_id = self.source.id
+        clone1_id = self.clone1.id
+        clone2_id = self.clone2.id
+
+        self.source.delete()
+
+        self.assertFalse(Entity.objects.filter(id=source_id).exists())
+        self.assertFalse(Entity.objects.filter(id=clone1_id).exists())
+        self.assertFalse(Entity.objects.filter(id=clone2_id).exists())
+        self.assertEqual(EntityCloneLink.objects.count(), 0)
+
+    def test_clone_entity_deletion_does_not_affect_source(self):
+        """Deleting a clone should leave the source and other clones intact."""
+        clone1_id = self.clone1.id
+
+        self.clone1.delete()
+
+        # Source and other clone should still exist
+        self.assertTrue(Entity.objects.filter(id=self.source.id).exists())
+        self.assertTrue(Entity.objects.filter(id=self.clone2.id).exists())
+        self.assertFalse(Entity.objects.filter(id=clone1_id).exists())
+
+        # Source should now have only 1 clone
+        self.assertEqual(self.source.get_clones().count(), 1)
+
+    def test_is_clone_property(self):
+        """is_clone should be True for clones, False for source entities."""
+        self.assertFalse(self.source.is_clone)
+        self.assertTrue(self.clone1.is_clone)
+        self.assertTrue(self.clone2.is_clone)
+
+    def test_get_attribute_owner_delegates_to_source(self):
+        """Clone attribute owner should be the source entity."""
+        self.assertEqual(self.clone1.get_attribute_owner(), self.source)
+        self.assertEqual(self.source.get_attribute_owner(), self.source)
+
+    def test_get_state_owner_respects_share_states_flag(self):
+        """State owner depends on share_states flag."""
+        # clone1 shares states
+        self.assertEqual(self.clone1.get_state_owner(), self.source)
+        # clone2 does NOT share states
+        self.assertEqual(self.clone2.get_state_owner(), self.clone2)
+
+    def test_source_deletion_cascades_clone_attributes(self):
+        """Deleting source should cascade-delete all clone-related data too."""
+        attr = EntityAttribute.objects.create(
+            entity=self.source,
+            name='shared_attr',
+            value_type=AttributeValueType.TEXT,
+            value='shared_value',
+        )
+        attr_id = attr.id
+
+        self.source.delete()
+
+        self.assertFalse(EntityAttribute.objects.filter(id=attr_id).exists())
+        self.assertEqual(Entity.objects.count(), 0)
+

@@ -1,0 +1,51 @@
+{% extends "modals/action_with_cancel.html" %}
+{% load icons %}
+
+{% block title_text %}
+Clone "{{ entity.name }}"
+{% endblock %}
+
+{% block body %}
+<div>
+  <p class="text-muted mb-3">
+    Create shallow copies of this item. Clones share the same attributes
+    and (optionally) states as the original.
+  </p>
+
+  <div class="sidebar-form-field">
+    <label for="id_clone_count" class="sidebar-form-label">Number of clones</label>
+    <input type="number" min="1" max="64" id="id_clone_count"
+           name="clone_count" value="1" class="sidebar-form-input">
+  </div>
+
+  <div class="sidebar-form-field">
+    <label for="id_clone_share_states" class="sidebar-form-label">
+      <input type="checkbox" id="id_clone_share_states"
+             name="clone_share_states" value="true" checked>
+      Share states with clones
+    </label>
+    <small class="text-muted d-block mt-1">
+      Enable for items that share the same state (e.g., sprinkler heads
+      on one zone). Disable for items with independent states (e.g., smoke
+      detectors).
+    </small>
+  </div>
+</div>
+{% endblock %}
+
+{% block preamble %}
+<form action="{% url 'entity_clone' entity_id=entity.id %}" method="post"
+      class="form" data-async="modal">
+  {% csrf_token %}
+{% endblock %}
+
+{% block action_right %}
+<button id="hi-clone-entity-button" type="submit" class="btn btn-primary"
+        name="action" value="clone">
+  {% icon "copy" size="sm" css_class="hi-icon-left" %}CLONE
+</button>
+{% endblock %}
+
+{% block postamble %}
+</form>
+{% endblock %}
