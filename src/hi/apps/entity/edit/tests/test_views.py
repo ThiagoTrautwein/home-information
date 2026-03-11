@@ -9,7 +9,7 @@ from hi.apps.entity.edit.views import ManagePairingsView
 from hi.apps.entity.entity_manager import EntityManager
 from hi.apps.entity.entity_pairing_manager import EntityPairingManager
 from hi.apps.entity.enums import EntityType
-from hi.apps.entity.models import Entity, EntityCloneLink, EntityPosition, EntityStateDelegation
+from hi.apps.entity.models import Entity, EntityPosition, EntityStateDelegation
 from hi.apps.location.enums import LocationViewType
 from hi.apps.location.location_manager import LocationManager
 from hi.apps.location.models import Location, LocationView
@@ -243,58 +243,6 @@ class TestEntityAddView(DualModeViewTestCase):
             EntityPosition.objects.filter(entity=new_entity).exists(),
             "No EntityPosition should be created when no location view available"
         )
-
-    def test_post_valid_form_with_clones_creates_clone_links(self):
-        """Test creating multiple entities with clone links in location view context."""
-        self.setSessionViewType(ViewType.LOCATION_VIEW)
-
-        url = reverse('entity_edit_entity_add')
-        response = self.client.post(url, {
-            'name': 'Sprinkler Head',
-            'entity_type_str': str(EntityType.LIGHT),
-            'clone_count': '4',
-            'clone_share_states': 'true',
-        })
-
-        self.assertSuccessResponse(response)
-        self.assertJsonResponse(response)
-
-        created_entities = list(Entity.objects.filter(name__startswith='Sprinkler Head').order_by('id'))
-        self.assertEqual(len(created_entities), 4)
-
-        source_entity = created_entities[0]
-        clone_links = EntityCloneLink.objects.filter(source_entity=source_entity).order_by('clone_entity_id')
-        self.assertEqual(clone_links.count(), 3)
-        self.assertTrue(all(x.share_states for x in clone_links))
-
-        # Source plus clones should all be positioned in location view.
-        self.assertEqual(
-            EntityPosition.objects.filter(entity__in=created_entities, location=self.location).count(),
-            4,
-        )
-
-    def test_post_valid_form_with_clones_uses_grid_positions(self):
-        """Test clone placement spreads entities instead of stacking at one point."""
-        self.setSessionViewType(ViewType.LOCATION_VIEW)
-
-        url = reverse('entity_edit_entity_add')
-        response = self.client.post(url, {
-            'name': 'Window Sensor',
-            'entity_type_str': str(EntityType.PRESENCE_SENSOR),
-            'clone_count': '5',
-        })
-
-        self.assertSuccessResponse(response)
-
-        created_entities = list(Entity.objects.filter(name__startswith='Window Sensor').order_by('id'))
-        positions = list(
-            EntityPosition.objects.filter(entity__in=created_entities, location=self.location)
-            .values_list('svg_x', 'svg_y')
-        )
-        self.assertEqual(len(positions), 5)
-
-        # Grid layout should create more than one unique coordinate pair.
-        self.assertGreater(len(set(positions)), 1)
 
 
 class TestEntityDeleteView(DualModeViewTestCase):

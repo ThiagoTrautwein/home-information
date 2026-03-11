@@ -1,8 +1,7 @@
 import json
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from django.db import models
-from django.db.models import F, Q
 
 from hi.apps.location.models import (
     Location,
@@ -90,81 +89,13 @@ class Entity( IntegrationDetailsModel, LocationItemModelMixin ):
         return
 
     def get_attribute_map(self):
-        return {
-            attr.name: attr
-            for attr in self.attribute_owner.attributes.all()
-        }
-
-    @property
-    def clone(self) -> Optional["EntityCloneLink"]:
-        try:
-            return self.clone_link
-        except EntityCloneLink.DoesNotExist:
-            return None
-        
-    @property
-    def is_clone(self) -> bool:
-        return self.clone is not None
-    
-    @property
-    def attribute_owner(self) -> "Entity":
-        clone = self.clone
-        if clone:
-            return clone.source_entity
-        return self
-
-    @property
-    def state_owner(self) -> "Entity":
-        clone = self.clone
-        if clone and clone.share_states:
-            return clone.source_entity
-        return self
-
-    @property
-    def clones(self):
-        return Entity.objects.filter(clone_link__source_entity=self)
-
-    def delete(self, *args, **kwargs):
-        for clone in self.clones:
-            clone.delete(*args, **kwargs)
-
-        return super().delete(*args, **kwargs)
+        attribute_map = dict()
+        for attribute in self.attributes.all():
+            attribute_map[attribute.name] = attribute
+            continue
+        return attribute_map
 
 
-class EntityCloneLink(models.Model):
-    """Links a clone entity to a source entity for shared behavior."""
-
-    source_entity = models.ForeignKey(
-        Entity,
-        verbose_name = 'Source Entity',
-        on_delete = models.CASCADE,
-    )
-    clone_entity = models.OneToOneField(
-        Entity,
-        related_name='clone_link',
-        verbose_name = 'Clone Entity',
-        on_delete = models.CASCADE,
-    )
-    share_states = models.BooleanField(
-        'Share States?',
-        default = True,
-    )
-    created_datetime = models.DateTimeField(
-        'Created',
-        auto_now_add = True,
-    )
-
-    class Meta:
-        verbose_name = 'Entity Clone Link'
-        verbose_name_plural = 'Entity Clone Links'
-
-    def __str__(self):
-        return (
-            f'Clone[{self.clone_entity.id}] -> Source[{self.source_entity.id}] '
-            f'(share_states={self.share_states})'
-        )
-
-        
 class EntityAttribute( AttributeModel ):
     """
     - Information related to an entity, e.g., specs, docs, notes, configs
@@ -194,6 +125,31 @@ class EntityAttribute( AttributeModel ):
         return EntityAttributeHistory
 
 
+class EntityInstance( models.Model ):
+
+    entity = models.ForeignKey(
+        Entity,
+        on_delete = models.CASCADE,
+        related_name = "instances"
+    )
+
+    share_states = models.BooleanField(
+        'Share States?',
+        default = True
+    )
+
+    created_datetime = models.DateTimeField(
+        'Created',
+        auto_now_add = True
+    )
+
+    @property
+    def state_owner(self):
+        if self.share_states:
+            return self.entity
+        return self
+
+        
 class EntityState( models.Model ):
     """
     - The (hidden) state of an entity that can be controlled and/or sensed.
@@ -413,9 +369,9 @@ class EntityPosition( LocationItemPositionModel ):
     )
     entity = models.ForeignKey(
         Entity,
-        related_name = 'positions',
-        verbose_name = 'Entity',
-        on_delete = models.CASCADE,
+        related_name='positions',
+        verbose_name='Entity',
+        on_delete=models.CASCADE,
     )
     created_datetime = models.DateTimeField(
         'Created',

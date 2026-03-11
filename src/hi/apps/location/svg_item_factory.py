@@ -53,8 +53,10 @@ class SvgItemFactory( Singleton ):
             template_name = ItemStyle.get_default_svg_icon_template_name()
             viewbox = ItemStyle.get_default_svg_icon_viewbox()
 
+        html_id = getattr( position, 'html_id', item.html_id )
+
         return SvgIconItem(
-            html_id = item.html_id,
+            html_id = html_id,
             css_class = css_class,
             status_value = svg_status_style.status_value,
             position_x = float( position.svg_x ),

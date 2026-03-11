@@ -115,14 +115,8 @@ class EntityAttributeHistoryInlineView( View, AttributeEditViewMixin ):
              **kwargs     : Any          ) -> HttpResponse:
         # Validate that the attribute belongs to this entity for security
         try:
-            entity = Entity.objects.get( pk = entity_id )
-        except Entity.DoesNotExist:
-            return page_not_found_response(request, "Entity not found.")
-
-        attribute_owner = entity.get_attribute_owner()
-        try:
             attribute = EntityAttribute.objects.select_related('entity').get(
-                pk = attribute_id, entity = attribute_owner )
+                pk = attribute_id, entity_id = entity_id )
         except EntityAttribute.DoesNotExist:
             return page_not_found_response(request, "Attribute not found.")
 
@@ -147,14 +141,8 @@ class EntityAttributeRestoreInlineView( View, AttributeEditViewMixin ):
         """ Need to do restore in a GET since nested in main form and cannot have a form in a form """
 
         try:
-            entity = Entity.objects.get( pk = entity_id )
-        except Entity.DoesNotExist:
-            return page_not_found_response(request, "Entity not found.")
-
-        attribute_owner = entity.get_attribute_owner()
-        try:
             attribute = EntityAttribute.objects.select_related('entity').get(
-                pk = attribute_id, entity = attribute_owner )
+                pk = attribute_id, entity_id = entity_id )
         except EntityAttribute.DoesNotExist:
             return page_not_found_response(request, "Attribute not found.")
 

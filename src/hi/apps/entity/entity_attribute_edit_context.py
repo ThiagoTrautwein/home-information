@@ -40,10 +40,6 @@ class EntityAttributeItemEditContext(AttributeItemEditContext):
     def entity(self) -> Entity:
         """Get the Entity instance (typed accessor)."""
         return self.owner
-
-    @property
-    def attribute_owner(self) -> Entity:
-        return self.entity.get_attribute_owner()
     
     @property
     def attribute_model_subclass(self) -> Type[AttributeModel]:
@@ -57,18 +53,15 @@ class EntityAttributeItemEditContext(AttributeItemEditContext):
         return EntityForm( form_data, instance = self.entity )
 
     def create_attribute_model( self ) -> AttributeModel:
-        return EntityAttribute( entity = self.attribute_owner )
+        return EntityAttribute( entity = self.entity )
     
     def create_regular_attributes_formset(
             self, form_data : Optional[ Dict[str, Any] ] = None ) -> BaseInlineFormSet:
         return EntityAttributeRegularFormSet(
             form_data,
-            instance = self.attribute_owner,
+            instance = self.entity,
             prefix = self.formset_prefix,
         )
-
-    def attributes_queryset(self):
-        return self.attribute_owner.attributes.all()
 
     @property
     def can_restore_default(self):

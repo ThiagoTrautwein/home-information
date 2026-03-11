@@ -62,15 +62,6 @@ class EntityViewInLine(admin.TabularInline):
     show_change_link = True
 
 
-class CloneLinkAsSourceInLine(admin.TabularInline):
-    model = models.EntityCloneLink
-    fk_name = 'source_entity'
-    extra = 0
-    show_change_link = True
-    verbose_name = 'Clone of this entity'
-    verbose_name_plural = 'Clones of this entity'
-
-
 @admin.register(models.Entity)
 class EntityAdmin(admin.ModelAdmin):
 
@@ -93,24 +84,7 @@ class EntityAdmin(admin.ModelAdmin):
         PositionInLine,
         PathInLine,
         EntityStateDelegationInLine,
-        CloneLinkAsSourceInLine,
     ]
-
-
-@admin.register(models.EntityCloneLink)
-class EntityCloneLinkAdmin(admin.ModelAdmin):
-
-    show_full_result_count = False
-
-    list_display = (
-        'source_entity',
-        'clone_entity',
-        'share_states',
-        'created_datetime',
-    )
-
-    search_fields = ['source_entity__name', 'clone_entity__name']
-    readonly_fields = ('source_entity', 'clone_entity', 'created_datetime')
     
 
 @admin.register(models.EntityState)

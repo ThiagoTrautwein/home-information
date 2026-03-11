@@ -29,31 +29,3 @@
     <div class="sidebar-form-error">{{ entity_form.entity_type_str.errors }}</div>
   {% endif %}
 </div>
-
-{% if entity_form.clone_count %}
-<div class="sidebar-form-field">
-  <label for="{{ entity_form.clone_count.id_for_label }}" class="sidebar-form-label">{{ entity_form.clone_count.label }}</label>
-  <input type="number" min="1" max="64"
-         id="{{ entity_form.clone_count.id_for_label }}"
-         name="{{ entity_form.clone_count.name }}"
-         value="{{ entity_form.clone_count.value|default:'1' }}"
-         class="sidebar-form-input">
-  {% if entity_form.clone_count.errors %}
-    <div class="sidebar-form-error">{{ entity_form.clone_count.errors }}</div>
-  {% endif %}
-</div>
-
-<div class="sidebar-form-field">
-  <label for="{{ entity_form.clone_share_states.id_for_label }}" class="sidebar-form-label">
-    <input type="checkbox"
-           id="{{ entity_form.clone_share_states.id_for_label }}"
-           name="{{ entity_form.clone_share_states.name }}"
-           value="true"
-           {% if entity_form.clone_share_states.value %}checked{% endif %}>
-    {{ entity_form.clone_share_states.label }}
-  </label>
-  {% if entity_form.clone_share_states.errors %}
-    <div class="sidebar-form-error">{{ entity_form.clone_share_states.errors }}</div>
-  {% endif %}
-</div>
-{% endif %}

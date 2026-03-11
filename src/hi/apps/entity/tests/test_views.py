@@ -11,7 +11,7 @@ from django.urls import reverse
 from hi.apps.attribute.enums import AttributeValueType
 from hi.apps.control.controller_history_manager import ControllerHistoryManager
 from hi.apps.entity.enums import EntityType, EntityStateType
-from hi.apps.entity.models import Entity, EntityAttribute, EntityCloneLink
+from hi.apps.entity.models import Entity, EntityAttribute
 from hi.apps.location.models import Location, LocationView
 from hi.apps.location.enums import LocationViewType
 from hi.apps.sense.sensor_history_manager import SensorHistoryManager
@@ -234,57 +234,6 @@ class TestEntityEditView(DualModeViewTestCase):
 
         self.assertSuccessResponse(response)
         self.assertJsonResponse(response)
-
-    def test_get_modal_for_clone_shows_source_attributes(self):
-        """Clone entities should render/edit attributes owned by source entity."""
-        source_entity = EntityAttributeSyntheticData.create_test_entity(name='Source Entity')
-        source_attr = EntityAttributeSyntheticData.create_test_text_attribute(
-            entity=source_entity,
-            name='shared-note',
-            value='source-value',
-        )
-        clone_entity = EntityAttributeSyntheticData.create_test_entity(name='Source Entity (2)')
-        EntityCloneLink.objects.create(
-            source_entity=source_entity,
-            clone_entity=clone_entity,
-            share_states=True,
-        )
-
-        url = reverse('entity_edit', kwargs={'entity_id': clone_entity.id})
-        response = self.client.get(url)
-
-        self.assertSuccessResponse(response)
-        formset_instances = [x.instance for x in response.context['regular_attributes_formset'].forms if x.instance.pk]
-        self.assertEqual(len(formset_instances), 1)
-        self.assertEqual(formset_instances[0].id, source_attr.id)
-        self.assertEqual(formset_instances[0].entity_id, source_entity.id)
-
-    def test_post_clone_updates_source_attribute(self):
-        """Posting clone edit form should update source entity attribute records."""
-        source_entity = EntityAttributeSyntheticData.create_test_entity(name='Smoke Detector')
-        shared_attr = EntityAttributeSyntheticData.create_test_text_attribute(
-            entity=source_entity,
-            name='install-date',
-            value='2024-01-01',
-        )
-        clone_entity = EntityAttributeSyntheticData.create_test_entity(name='Smoke Detector (2)')
-        EntityCloneLink.objects.create(
-            source_entity=source_entity,
-            clone_entity=clone_entity,
-            share_states=True,
-        )
-
-        url = reverse('entity_edit', kwargs={'entity_id': clone_entity.id})
-        form_data = EntityAttributeSyntheticData.create_form_data_for_entity_edit(entity=clone_entity)
-        prefix = f'entity-{clone_entity.id}'
-        form_data[f'{prefix}-0-value'] = '2025-02-14'
-
-        response = self.client.post(url, form_data)
-        self.assertSuccessResponse(response)
-
-        shared_attr.refresh_from_db()
-        self.assertEqual(shared_attr.value, '2025-02-14')
-        self.assertEqual(clone_entity.attributes.count(), 0)
         self.assertTemplateRendered(response, 'attribute/components/file_card.html')
         
         # Check antinode response structure

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from django.core.exceptions import BadRequest
 from django.db import transaction
@@ -532,6 +533,15 @@ class LocationViewCollectionToggleView( View, LocationViewMixin ):
 @method_decorator( edit_required, name='dispatch' )
 class LocationItemPositionView( View ):
 
+    def _decode_entity_instance_id(self, html_id: str):
+        m = re.match( r'^hi-entity-\d+-([a-z]+)$', html_id or '' )
+        if not m:
+            return None
+        value = 0
+        for c in m.group(1):
+            value = ( value * 26 ) + ( ord(c) - ord('a') + 1 )
+        return value
+
     def post(self, request, *args, **kwargs):
         
         try:
@@ -540,9 +550,12 @@ class LocationItemPositionView( View ):
             raise BadRequest( 'Bad item id.' )
         
         if item_type == ItemType.ENTITY:
+            html_id = kwargs.get( ItemType.HTML_ID_ARG() )
+            entity_instance_id = self._decode_entity_instance_id( html_id )
             return EntityPositionEditView().post(
                 request,
                 entity_id = item_id,
+                entity_instance_id = entity_instance_id,
             )
         elif item_type == ItemType.COLLECTION:
             return CollectionPositionEditView().post(
