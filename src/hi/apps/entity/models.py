@@ -369,9 +369,18 @@ class EntityPosition( LocationItemPositionModel ):
     )
     entity = models.ForeignKey(
         Entity,
-        related_name='positions',
-        verbose_name='Entity',
-        on_delete=models.CASCADE,
+        related_name = 'positions',
+        verbose_name = 'Entity',
+        on_delete = models.CASCADE,
+        null = True
+    )
+    entity_instance = models.ForeignKey(
+        EntityInstance,
+        related_name = 'positions',
+        verbose_name = 'Entity Instance',
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True,
     )
     created_datetime = models.DateTimeField(
         'Created',
@@ -395,7 +404,7 @@ class EntityPosition( LocationItemPositionModel ):
             
     @property
     def location_item(self) -> LocationItemModelMixin:
-        return self.entity
+        return self.entity_instance if self.entity_instance else self.entity
 
     
 class EntityPath( LocationItemPathModel ):
@@ -416,6 +425,15 @@ class EntityPath( LocationItemPathModel ):
         related_name = 'paths',
         verbose_name = 'Entity',
         on_delete = models.CASCADE,
+        null = True,
+    )
+    entity_instance = models.ForeignKey(
+        EntityInstance,
+        related_name = 'paths',
+        verbose_name = 'Entity Instance',
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True,
     )
     created_datetime = models.DateTimeField(
         'Created',
@@ -438,7 +456,7 @@ class EntityPath( LocationItemPathModel ):
             
     @property
     def location_item(self) -> LocationItemModelMixin:
-        return self.entity
+        return self.entity_instance if self.entity_instance else self.entity
 
     
 class EntityView(models.Model):

@@ -17,6 +17,10 @@ urlpatterns = [
              views.EntityPositionEditView.as_view(), 
              name='entity_position_edit' ),
 
+    re_path( r'^instance/add/(?P<entity_id>\d+)$',
+             views.EntityInstanceAddView.as_view(),
+             name='entity_edit_entity_instance_add' ),
+
     re_path( r'^principal/manage/(?P<entity_id>\d+)$', 
              views.ManagePairingsView.as_view(), 
              name='entity_edit_manage_pairings' ),

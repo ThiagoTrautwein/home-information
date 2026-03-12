@@ -20,6 +20,22 @@
   {% include "entity/edit/panes/entity_properties_edit.html" %}
 </div>
 
+<hr />
+<div class="h5">Instance</div>
+<form action="{% url 'entity_edit_entity_instance_add' entity_id=entity.id %}"
+      method="post"
+      class="form"
+      data-async="true">
+  {% csrf_token %}
+  <div class="form-check mb-2">
+    <input class="form-check-input" type="checkbox" id="hi-share-states" name="share_states" checked>
+    <label class="form-check-label" for="hi-share-states">Share states with original</label>
+  </div>
+  <button type="submit" class="btn btn-sm btn-primary btn-block btn-control">
+    ADD INSTANCE
+  </button>
+</form>
+
 {% if entity.can_user_delete %}
 <div class="my-2">
   <a href="{% url 'entity_edit_entity_delete' entity_id=entity.id %}"

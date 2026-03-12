@@ -1,5 +1,6 @@
 import logging
 import re
+from decimal import Decimal
 from typing import Any, Dict, Optional
 
 from django.core.exceptions import BadRequest, PermissionDenied
@@ -16,7 +17,7 @@ from hi.apps.entity.entity_manager import EntityManager
 from hi.apps.entity.entity_pairing_manager import EntityPairingManager, EntityPairingError
 from hi.apps.entity.edit.entity_type_transition_handler import EntityTypeTransitionHandler
 from hi.apps.entity.forms import EntityForm
-from hi.apps.entity.models import Entity, EntityPosition
+from hi.apps.entity.models import Entity, EntityPath, EntityPosition
 from hi.apps.entity.view_mixins import EntityViewMixin
 from hi.apps.location.models import LocationView
 from hi.apps.location.location_manager import LocationManager
@@ -29,6 +30,72 @@ from hi.hi_async_view import HiModalView, HiSideView
 from . import forms
 
 logger = logging.getLogger(__name__)
+
+
+@method_decorator( edit_required, name='dispatch' )
+class EntityInstanceAddView( View, EntityViewMixin ):
+
+    GRID_COLUMNS = 4
+    GRID_SPACING = Decimal('20.0')
+
+    def _is_share_states_enabled( self, request : HttpRequest ) -> bool:
+        value = str( request.POST.get( 'share_states', '' )).lower()
+        return value in { '1', 'true', 'yes', 'on' }
+
+    def _get_grid_offset( self, existing_instance_count : int ) -> tuple[Decimal, Decimal]:
+        col = existing_instance_count % self.GRID_COLUMNS
+        row = existing_instance_count // self.GRID_COLUMNS
+
+        # Offset from the original entity so new copies don't stack on top.
+        offset_x = Decimal( col + 1 ) * self.GRID_SPACING
+        offset_y = Decimal( row ) * self.GRID_SPACING
+        return offset_x, offset_y
+
+    def post( self,
+              request : HttpRequest,
+              *args   : Any,
+              **kwargs: Any          ) -> HttpResponse:
+        entity: Entity = self.get_entity( request, *args, **kwargs )
+
+        share_states = self._is_share_states_enabled( request )
+        existing_instance_count = entity.instances.count()
+
+        with transaction.atomic():
+            entity_instance = entity.instances.create(
+                share_states = share_states,
+            )
+
+            if request.view_parameters.view_type.is_location_view:
+                current_location_view = LocationManager().get_default_location_view( request = request )
+                location = current_location_view.location
+
+                if entity.entity_type.requires_position():
+                    source_position = EntityPosition.objects.filter(
+                        entity = entity,
+                        location = location,
+                    ).first()
+                    if source_position:
+                        offset_x, offset_y = self._get_grid_offset( existing_instance_count )
+                        EntityPosition.objects.create(
+                            location = location,
+                            entity = None,
+                            entity_instance = entity_instance,
+                            svg_x = source_position.svg_x + offset_x,
+                            svg_y = source_position.svg_y + offset_y,
+                            svg_scale = source_position.svg_scale,
+                            svg_rotate = source_position.svg_rotate,
+                        )
+                elif entity.entity_type.requires_path():
+                    source_path = entity.paths.filter( location = location ).first()
+                    if source_path:
+                        EntityPath.objects.create(
+                            location = location,
+                            entity = None,
+                            entity_instance = entity_instance,
+                            svg_path = source_path.svg_path,
+                        )
+
+        return antinode.refresh_response()
 
 
 class EntityEditModeView( HiSideView, EntityViewMixin ):
