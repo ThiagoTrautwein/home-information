@@ -2,7 +2,7 @@ from hi.apps.common.singleton import Singleton
 from hi.apps.location.path_geometry import PathGeometry
 from hi.apps.common.svg_models import SvgIconItem, SvgPathItem, SvgStatusStyle, SvgViewBox
 from hi.apps.collection.models import Collection
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityInstance
 
 from hi.hi_styles import CollectionStyle, EntityStyle, ItemStyle
 
@@ -21,6 +21,30 @@ class SvgItemFactory( Singleton ):
 
     def __init_singleton__(self):
         return
+
+    def _entity_instance_suffix( self, entity_instance : EntityInstance ) -> str:
+        value = entity_instance.id or 0
+        if value <= 0:
+            return 'a'
+
+        chars = []
+        while value > 0:
+            value, remainder = divmod( value - 1, 26 )
+            chars.append( chr( ord('a') + remainder ))
+        return ''.join( reversed( chars ))
+
+    def _get_entity_type( self, item ):
+        if isinstance( item, EntityInstance ):
+            return item.entity.entity_type
+        if isinstance( item, Entity ):
+            return item.entity_type
+        return None
+
+    def _get_item_html_id( self, item ) -> str:
+        if isinstance( item, EntityInstance ):
+            base_html_id = item.entity.item_type.html_id( item.entity.id )
+            return f'{base_html_id}-{self._entity_instance_suffix( item )}'
+        return item.html_id
 
     def get_display_only_svg_icon_item( self, entity : Entity ) -> SvgIconItem:
         template_name = EntityStyle.get_svg_icon_template_name( entity_type = entity.entity_type )
@@ -46,14 +70,19 @@ class SvgItemFactory( Singleton ):
         if not svg_status_style:
             svg_status_style = ItemStyle.get_default_svg_icon_status_style()
 
-        if isinstance( item, Entity ):
-            template_name = EntityStyle.get_svg_icon_template_name( entity_type = item.entity_type )
-            viewbox = EntityStyle.get_svg_icon_viewbox( entity_type = item.entity_type )
+        if isinstance( item, ( Entity, EntityInstance ) ):
+            entity_type = self._get_entity_type( item )
+            template_name = EntityStyle.get_svg_icon_template_name( entity_type = entity_type )
+            viewbox = EntityStyle.get_svg_icon_viewbox( entity_type = entity_type )
         else:
             template_name = ItemStyle.get_default_svg_icon_template_name()
             viewbox = ItemStyle.get_default_svg_icon_viewbox()
 
-        html_id = getattr( position, 'html_id', item.html_id )
+        position_html_id = getattr( position, 'html_id', None )
+        if isinstance( position_html_id, str ) and position_html_id:
+            html_id = position_html_id
+        else:
+            html_id = self._get_item_html_id( item )
 
         return SvgIconItem(
             html_id = html_id,
@@ -76,15 +105,15 @@ class SvgItemFactory( Singleton ):
                               css_class         : str,
                               svg_status_style  : SvgStatusStyle              = None  ) -> SvgPathItem:
         if not svg_status_style:
-            if isinstance( item, Entity ):
-                svg_status_style = EntityStyle.get_svg_path_status_style( item.entity_type )
+            if isinstance( item, ( Entity, EntityInstance ) ):
+                svg_status_style = EntityStyle.get_svg_path_status_style( self._get_entity_type( item ) )
             elif isinstance( item, Collection ):
                 svg_status_style = CollectionStyle.get_svg_path_status_style( item.collection_type )
             if not svg_status_style:
                 svg_status_style = ItemStyle.get_default_svg_path_status_style()
 
         return SvgPathItem(
-            html_id = item.html_id,
+            html_id = self._get_item_html_id( item ),
             css_class = css_class,
             svg_path = path.svg_path,
             stroke_color = svg_status_style.stroke_color,
@@ -95,8 +124,8 @@ class SvgItemFactory( Singleton ):
         )
 
     def get_svg_item_type( self, obj ) -> SvgItemType:
-        if isinstance( obj, Entity ):
-            entity_type = obj.entity_type
+        if isinstance( obj, ( Entity, EntityInstance ) ):
+            entity_type = self._get_entity_type( obj )
 
             if entity_type.requires_open_path():
                 return SvgItemType.OPEN_PATH

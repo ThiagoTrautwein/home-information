@@ -36,9 +36,12 @@ class LocationViewData:
 
         for entity_position in self.entity_positions:
 
-            css_class = self._css_class_map.get( entity_position.entity, '' )
+            item = entity_position.location_item
+            entity = entity_position.entity if entity_position.entity else entity_position.entity_instance.entity
+
+            css_class = self._css_class_map.get( entity, '' )
             latest_entity_state_status_data = self._latest_entity_state_status_data_map.get(
-                entity_position.entity,
+                entity,
             )
             if latest_entity_state_status_data:
                 status_display_data = StatusDisplayData(
@@ -49,7 +52,7 @@ class LocationViewData:
                 svg_status_style = None
             
             svg_icon_item = self._svg_item_factory.create_svg_icon_item(
-                item = entity_position.entity,
+                item = item,
                 position = entity_position,
                 css_class = css_class,
                 svg_status_style = svg_status_style,
@@ -71,9 +74,12 @@ class LocationViewData:
 
         for entity_path in self.entity_paths:
 
-            css_class = self._css_class_map.get( entity_path.entity, '' )
+            item = entity_path.location_item
+            entity = entity_path.entity if entity_path.entity else entity_path.entity_instance.entity
+
+            css_class = self._css_class_map.get( entity, '' )
             latest_entity_state_status_data = self._latest_entity_state_status_data_map.get(
-                entity_path.entity,
+                entity,
             )
             if latest_entity_state_status_data:
                 status_display_data = StatusDisplayData(
@@ -84,7 +90,7 @@ class LocationViewData:
                 svg_status_style = None
                 
             svg_path_item = self._svg_item_factory.create_svg_path_item(
-                item = entity_path.entity,
+                item = item,
                 path = entity_path,
                 css_class = css_class,
                 svg_status_style = svg_status_style,

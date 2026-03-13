@@ -569,6 +569,15 @@ class LocationItemPositionView( View ):
 @method_decorator( edit_required, name='dispatch' )
 class LocationItemPathView( View ):
 
+    def _decode_entity_instance_id(self, html_id: str):
+        m = re.match( r'^hi-entity-\d+-([a-z]+)$', html_id or '' )
+        if not m:
+            return None
+        value = 0
+        for c in m.group(1):
+            value = ( value * 26 ) + ( ord(c) - ord('a') + 1 )
+        return value
+
     def post(self, request, *args, **kwargs):
         try:
             ( item_type, item_id ) = ItemType.parse_from_dict( kwargs )
@@ -581,10 +590,13 @@ class LocationItemPathView( View ):
         
         location = LocationManager().get_default_location( request = request )
         if item_type == ItemType.ENTITY:
+            html_id = kwargs.get( ItemType.HTML_ID_ARG() )
+            entity_instance_id = self._decode_entity_instance_id( html_id )
             EntityManager().set_entity_path(
                 entity_id = item_id,
                 location = location,
                 svg_path_str = svg_path_str,
+                entity_instance_id = entity_instance_id,
             )
         elif item_type == ItemType.COLLECTION:
             collection = CollectionManager().get_collection(

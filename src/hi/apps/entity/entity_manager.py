@@ -20,6 +20,7 @@ from .enums import (
 from .models import (
     Entity,
     EntityAttribute,
+    EntityInstance,
     EntityPath,
     EntityPosition,
     EntityState,
@@ -86,29 +87,48 @@ class EntityManager(Singleton):
         )
 
     def set_entity_path( self,
-                         entity_id     : int,
-                         location      : Location,
-                         svg_path_str  : str        ) -> EntityPath:
+                         entity_id            : int,
+                         location             : Location,
+                         svg_path_str         : str,
+                         entity_instance_id   : int = None ) -> EntityPath:
 
         with transaction.atomic():
+            if entity_instance_id:
+                entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                    id = entity_instance_id,
+                    entity_id = entity_id,
+                )
+
+                try:
+                    entity_path = EntityPath.objects.select_related( 'entity', 'entity_instance' ).get(
+                        location = location,
+                        entity_instance = entity_instance,
+                    )
+                    entity_path.svg_path = svg_path_str
+                    entity_path.save()
+                    return entity_path
+                except EntityPath.DoesNotExist:
+                    return EntityPath.objects.create(
+                        entity = None,
+                        entity_instance = entity_instance,
+                        location = location,
+                        svg_path = svg_path_str,
+                    )
+
             try:
-                entity_path = EntityPath.objects.get(
+                entity_path = EntityPath.objects.select_related( 'entity', 'entity_instance' ).get(
                     location = location,
                     entity_id = entity_id,
                 )
                 entity_path.svg_path = svg_path_str
                 entity_path.save()
                 return entity_path
-
             except EntityPath.DoesNotExist:
-                pass
-
-            entity = Entity.objects.get( id = entity_id )
-            return EntityPath.objects.create(
-                entity = entity,
-                location = location,
-                svg_path = svg_path_str,
-            )
+                return EntityPath.objects.create(
+                    entity_id = entity_id,
+                    location = location,
+                    svg_path = svg_path_str,
+                )
             
     def create_entity_view( self, entity : Entity, location_view : LocationView ):
 

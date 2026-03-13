@@ -17,7 +17,7 @@ from hi.apps.entity.entity_manager import EntityManager
 from hi.apps.entity.entity_pairing_manager import EntityPairingManager, EntityPairingError
 from hi.apps.entity.edit.entity_type_transition_handler import EntityTypeTransitionHandler
 from hi.apps.entity.forms import EntityForm
-from hi.apps.entity.models import Entity, EntityPath, EntityPosition
+from hi.apps.entity.models import Entity, EntityInstance, EntityPath, EntityPosition
 from hi.apps.entity.view_mixins import EntityViewMixin
 from hi.apps.location.models import LocationView
 from hi.apps.location.location_manager import LocationManager
@@ -86,7 +86,10 @@ class EntityInstanceAddView( View, EntityViewMixin ):
                             svg_rotate = source_position.svg_rotate,
                         )
                 elif entity.entity_type.requires_path():
-                    source_path = entity.paths.filter( location = location ).first()
+                    source_path = EntityPath.objects.filter(
+                        entity = entity,
+                        location = location,
+                    ).first()
                     if source_path:
                         EntityPath.objects.create(
                             location = location,
@@ -221,13 +224,24 @@ class EntityPositionEditView( View, EntityViewMixin ):
     def post(self, request, *args, **kwargs):
         entity = self.get_entity( request, *args, **kwargs )
         location = LocationManager().get_default_location( request = request )
+        entity_instance_id = kwargs.get( 'entity_instance_id' ) or request.POST.get( 'entity_instance_id' )
 
         try:
-            entity_position = EntityPosition.objects.get(
-                entity = entity,
-                location = location,
-            )
-        except EntityPosition.DoesNotExist:
+            if entity_instance_id:
+                entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                    id = int( entity_instance_id ),
+                    entity = entity,
+                )
+                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).get(
+                    entity_instance = entity_instance,
+                    location = location,
+                )
+            else:
+                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).get(
+                    entity = entity,
+                    location = location,
+                )
+        except (ValueError, EntityInstance.DoesNotExist, EntityPosition.DoesNotExist):
             raise Http404( request )
 
         entity_position_form = forms.EntityPositionForm(
@@ -241,7 +255,8 @@ class EntityPositionEditView( View, EntityViewMixin ):
             logger.warning( 'EntityPosition form is invalid.' )
             
         context = {
-            'entity': entity_position.entity,
+            'entity': entity,
+            'entity_instance_id': entity_position.entity_instance_id,
             'entity_position_form': entity_position_form,
         }
         template = get_template( 'entity/edit/panes/entity_position_edit.html' )
@@ -251,7 +266,7 @@ class EntityPositionEditView( View, EntityViewMixin ):
         }
 
         svg_icon_item = SvgItemFactory().create_svg_icon_item(
-            item = entity_position.entity,
+            item = entity_position.location_item,
             position = entity_position,
             css_class = '',
         )

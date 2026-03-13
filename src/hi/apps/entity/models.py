@@ -400,6 +400,18 @@ class EntityPosition( LocationItemPositionModel ):
                 fields = [ 'location', 'entity' ],
                 name = 'entity_position_location_entity',
             ),
+            models.UniqueConstraint(
+                fields = [ 'location', 'entity_instance' ],
+                condition = models.Q( entity_instance__isnull = False ),
+                name = 'entity_position_location_entity_instance',
+            ),
+            models.CheckConstraint(
+                check = (
+                    ( models.Q( entity__isnull = False ) & models.Q( entity_instance__isnull = True ) )
+                    | ( models.Q( entity__isnull = True ) & models.Q( entity_instance__isnull = False ) )
+                ),
+                name = 'entity_position_exactly_one_owner',
+            ),
         ]
             
     @property
@@ -452,6 +464,18 @@ class EntityPath( LocationItemPathModel ):
             models.UniqueConstraint(
                 fields = [ 'location', 'entity' ],
                 name = 'entity_path_location_entity', ),
+            models.UniqueConstraint(
+                fields = [ 'location', 'entity_instance' ],
+                condition = models.Q( entity_instance__isnull = False ),
+                name = 'entity_path_location_entity_instance',
+            ),
+            models.CheckConstraint(
+                check = (
+                    ( models.Q( entity__isnull = False ) & models.Q( entity_instance__isnull = True ) )
+                    | ( models.Q( entity__isnull = True ) & models.Q( entity_instance__isnull = False ) )
+                ),
+                name = 'entity_path_exactly_one_owner',
+            ),
         ]
             
     @property
