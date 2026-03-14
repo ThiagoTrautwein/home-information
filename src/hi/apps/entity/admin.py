@@ -94,6 +94,7 @@ class EntityStateAdmin(admin.ModelAdmin):
     
     list_display = (
         'entity',
+        'entity_instance',
         'name',
         'entity_state_type_str',
         'value_range_str',
@@ -102,7 +103,7 @@ class EntityStateAdmin(admin.ModelAdmin):
     )
 
     search_fields = ['name']
-    readonly_fields = ( 'entity', 'created_datetime', )
+    readonly_fields = ( 'entity', 'entity_instance', 'created_datetime', )
     inlines = [
         ControllerInLine,
         SensorInLine,

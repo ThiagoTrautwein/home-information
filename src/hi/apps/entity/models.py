@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 from django.db import models
 
@@ -95,6 +95,22 @@ class Entity( IntegrationDetailsModel, LocationItemModelMixin ):
             continue
         return attribute_map
 
+    def shallow_copy( self, share_states : bool = True ) -> 'EntityInstance':
+        """Creates a shallow visual copy of this Entity as an EntityInstance.
+
+        When ``share_states`` is false, clones state definitions so the instance
+        has its own independent EntityState records.
+        """
+        entity_instance = self.instances.create(
+            share_states = share_states,
+        )
+
+        if not share_states:
+            for entity_state in self.states.all():
+                entity_state.clone_for_entity_instance( entity_instance )
+
+        return entity_instance
+
 
 class EntityAttribute( AttributeModel ):
     """
@@ -144,10 +160,15 @@ class EntityInstance( models.Model ):
     )
 
     @property
-    def state_owner(self):
+    def state_owner(self) -> Union[ Entity, 'EntityInstance' ]:
         if self.share_states:
             return self.entity
         return self
+
+    def get_states(self):
+        if self.share_states:
+            return self.entity.states.all()
+        return self.states.all()
 
         
 class EntityState( models.Model ):
@@ -161,7 +182,17 @@ class EntityState( models.Model ):
         related_name = 'states',
         verbose_name = 'Entity',
         on_delete = models.CASCADE,
-    )   
+        null = True,
+        blank = True,
+    )
+    entity_instance = models.ForeignKey(
+        EntityInstance,
+        related_name = 'states',
+        verbose_name = 'Entity Instance',
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True,
+    )
     entity_state_type_str = models.CharField(
         'State Type',
         max_length = 32,
@@ -190,12 +221,33 @@ class EntityState( models.Model ):
     class Meta:
         verbose_name = 'Entity State'
         verbose_name_plural = 'Entity States'
+        constraints = [
+            models.CheckConstraint(
+                check = (
+                    ( models.Q( entity__isnull = False ) & models.Q( entity_instance__isnull = True ) )
+                    | ( models.Q( entity__isnull = True ) & models.Q( entity_instance__isnull = False ) )
+                ),
+                name = 'entity_state_exactly_one_owner',
+            ),
+        ]
         
     def __str__(self):
         return f'{self.name}[{self.id}] ({self.entity_state_type_str})'
     
     def __repr__(self):
         return self.__str__()
+
+    @property
+    def owner(self) -> Union[ Entity, EntityInstance ]:
+        if self.entity:
+            return self.entity
+        return self.entity_instance
+
+    @property
+    def root_entity(self) -> Entity:
+        if self.entity:
+            return self.entity
+        return self.entity_instance.entity
     
     @property
     def entity_state_type(self):
@@ -277,6 +329,16 @@ class EntityState( models.Model ):
             except ( TypeError, ValueError, json.JSONDecodeError ):
                 pass
         return actual_value
+
+    def clone_for_entity_instance( self, entity_instance : EntityInstance ) -> 'EntityState':
+        return EntityState.objects.create(
+            entity = None,
+            entity_instance = entity_instance,
+            entity_state_type_str = self.entity_state_type_str,
+            name = self.name,
+            value_range_str = self.value_range_str,
+            units = self.units,
+        )
 
         
 class EntityStateDelegation(models.Model):
@@ -398,6 +460,7 @@ class EntityPosition( LocationItemPositionModel ):
         constraints = [
             models.UniqueConstraint(
                 fields = [ 'location', 'entity' ],
+                condition = models.Q( entity__isnull = False ),
                 name = 'entity_position_location_entity',
             ),
             models.UniqueConstraint(
@@ -463,6 +526,7 @@ class EntityPath( LocationItemPathModel ):
         constraints = [
             models.UniqueConstraint(
                 fields = [ 'location', 'entity' ],
+                condition = models.Q( entity__isnull = False ),
                 name = 'entity_path_location_entity', ),
             models.UniqueConstraint(
                 fields = [ 'location', 'entity_instance' ],

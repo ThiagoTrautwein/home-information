@@ -105,8 +105,8 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
         for entity_state_delegation in entity.entity_state_delegations.all():
             entity_state_set.add( entity_state_delegation.entity_state )
             if ( not entity_for_video
-                 and entity_state_delegation.entity_state.entity.has_video_stream ):
-                entity_for_video = entity_state_delegation.entity_state.entity
+                 and entity_state_delegation.entity_state.root_entity.has_video_stream ):
+                entity_for_video = entity_state_delegation.entity_state.root_entity
             continue
 
         entity_state_to_status_data = self._get_entity_state_to_entity_state_status_data(
@@ -189,7 +189,7 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
         #
         entity_to_entity_status_data = dict()
         for entity_state, entity_state_status_data in entity_state_to_status_data.items():
-            entity = entity_state.entity
+            entity = entity_state.root_entity
             if entity not in entity_to_entity_status_data:
                 entity_status_data = EntityStatusData(
                     entity = entity,

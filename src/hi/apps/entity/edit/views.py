@@ -61,7 +61,7 @@ class EntityInstanceAddView( View, EntityViewMixin ):
         existing_instance_count = entity.instances.count()
 
         with transaction.atomic():
-            entity_instance = entity.instances.create(
+            entity_instance = entity.shallow_copy(
                 share_states = share_states,
             )
 
