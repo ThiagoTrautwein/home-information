@@ -1,9 +1,10 @@
 from decimal import Decimal
 import logging
 from threading import local
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
@@ -70,6 +71,7 @@ class EntityManager(Singleton):
         if is_editing and location_view:
             entity_position = EntityPosition.objects.filter(
                 entity = entity,
+                entity_instance = None,
                 location = location_view.location,
             ).first()
             if entity_position:
@@ -218,22 +220,39 @@ class EntityManager(Singleton):
     
     def add_entity_position_if_needed( self,
                                        entity : Entity,
-                                       location_view : LocationView ) -> EntityPosition:
-        try:
-            _ = EntityPosition.objects.get(
-                location = location_view.location,
-                entity = entity,
-            )
-            return
-        except EntityPosition.DoesNotExist:
-            pass
+                                       location_view : LocationView,
+                                       entity_instance : Optional[EntityInstance] = None ) -> EntityPosition:
+        location = location_view.location
+
+        if entity_instance:
+            existing_position = EntityPosition.objects.filter(
+                location = location,
+                entity = None,
+                entity_instance = entity_instance,
+            ).first()
+            if existing_position:
+                return existing_position
+        else:
+            # Legacy fallback for pre-migration records, plus already-created
+            # instance-owned positions for this root entity.
+            existing_position = EntityPosition.objects.filter(
+                location = location,
+            ).filter(
+                Q(entity = entity, entity_instance = None)
+                | Q(entity = None, entity_instance__entity = entity)
+            ).order_by('-entity_id', 'id').first()
+            if existing_position:
+                return existing_position
+
+            entity_instance = self._get_or_create_primary_entity_instance( entity )
 
         # Default display in middle of current view
         svg_x = location_view.svg_view_box.x + ( location_view.svg_view_box.width / 2.0 )
         svg_y = location_view.svg_view_box.y + ( location_view.svg_view_box.height / 2.0 )
         
         entity_position = EntityPosition.objects.create(
-            entity = entity,
+            entity = None,
+            entity_instance = entity_instance,
             location = location_view.location,
             svg_x = Decimal( svg_x ),
             svg_y = Decimal( svg_y ),
@@ -241,6 +260,15 @@ class EntityManager(Singleton):
             svg_rotate = Decimal( 0.0 ),
         )
         return entity_position
+
+    def _get_or_create_primary_entity_instance( self, entity: Entity ) -> EntityInstance:
+        entity_instance = entity.instances.order_by( 'id' ).first()
+        if entity_instance:
+            return entity_instance
+        return EntityInstance.objects.create(
+            entity = entity,
+            share_states = True,
+        )
     
     def add_entity_path_if_needed( self,
                                    entity          : Entity,
@@ -285,9 +313,11 @@ class EntityManager(Singleton):
         
         # Check current state in database
         entity_position = EntityPosition.objects.filter(
-            entity = entity,
             location = location_view.location,
-        ).first()
+        ).filter(
+            Q(entity = entity, entity_instance = None)
+            | Q(entity = None, entity_instance__entity = entity)
+        ).order_by('-entity_id', 'id').first()
         entity_path = EntityPath.objects.filter(
             entity = entity,
             location = location_view.location,
@@ -430,16 +460,26 @@ class EntityManager(Singleton):
         
         # Preserve EntityPath and create/update EntityPosition
         # This allows easy reversion when users change their mind
-        entity_position, created = EntityPosition.objects.get_or_create(
-            entity = entity,
+        entity_position = EntityPosition.objects.filter(
             location = location_view.location,
-            defaults = {
-                'svg_x': Decimal(center_x),
-                'svg_y': Decimal(center_y),
-                'svg_scale': Decimal(1.0),
-                'svg_rotate': Decimal(0.0),
-            }
-        )
+        ).filter(
+            Q(entity = entity, entity_instance = None)
+            | Q(entity = None, entity_instance__entity = entity)
+        ).order_by('-entity_id', 'id').first()
+
+        created = False
+        if not entity_position:
+            entity_instance = self._get_or_create_primary_entity_instance( entity )
+            entity_position = EntityPosition.objects.create(
+                entity = None,
+                entity_instance = entity_instance,
+                location = location_view.location,
+                svg_x = Decimal(center_x),
+                svg_y = Decimal(center_y),
+                svg_scale = Decimal(1.0),
+                svg_rotate = Decimal(0.0),
+            )
+            created = True
         
         if not created:
             # EntityPosition already exists - preserve existing position

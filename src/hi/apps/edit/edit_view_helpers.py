@@ -1,5 +1,6 @@
 from hi.apps.entity.models import Entity, EntityView, EntityPosition, EntityPath
 from hi.apps.collection.models import CollectionEntity
+from django.db.models import Q
 
 
 class EditViewHelpers:
@@ -28,7 +29,15 @@ class EditViewHelpers:
         in_view_ids = set(EntityView.objects.values_list('entity_id', flat=True))
 
         # Get entities that have position or path records
-        positioned_ids = set(EntityPosition.objects.values_list('entity_id', flat=True))
+        positioned_ids = {
+            entity_id
+            for direct_entity_id, instance_entity_id in EntityPosition.objects.values_list(
+                'entity_id',
+                'entity_instance__entity_id',
+            )
+            for entity_id in (direct_entity_id, instance_entity_id)
+            if entity_id is not None
+        }
         pathed_ids = set(EntityPath.objects.values_list('entity_id', flat=True))
         has_location_data_ids = positioned_ids | pathed_ids
 
@@ -61,7 +70,9 @@ class EditViewHelpers:
             return not has_collection
 
         # Has view, check if has location data
-        has_position = EntityPosition.objects.filter(entity_id=entity_id).exists()
+        has_position = EntityPosition.objects.filter(
+            Q(entity_id=entity_id) | Q(entity_instance__entity_id=entity_id)
+        ).exists()
         has_path = EntityPath.objects.filter(entity_id=entity_id).exists()
 
         if has_position or has_path:

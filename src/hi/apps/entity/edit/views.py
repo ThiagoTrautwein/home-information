@@ -2,6 +2,7 @@ import logging
 import re
 from decimal import Decimal
 from typing import Any, Dict, Optional
+from django.db.models import Q
 
 from django.core.exceptions import BadRequest, PermissionDenied
 from django.db import transaction
@@ -71,9 +72,9 @@ class EntityInstanceAddView( View, EntityViewMixin ):
 
                 if entity.entity_type.requires_position():
                     source_position = EntityPosition.objects.filter(
-                        entity = entity,
+                        Q(entity = entity) | Q(entity_instance__entity = entity),
                         location = location,
-                    ).first()
+                    ).order_by('-entity_id', 'id').first()
                     if source_position:
                         offset_x, offset_y = self._get_grid_offset( existing_instance_count )
                         EntityPosition.objects.create(
@@ -237,10 +238,14 @@ class EntityPositionEditView( View, EntityViewMixin ):
                     location = location,
                 )
             else:
-                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).get(
-                    entity = entity,
+                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).filter(
                     location = location,
-                )
+                ).filter(
+                    Q(entity = entity, entity_instance = None)
+                    | Q(entity = None, entity_instance__entity = entity)
+                ).order_by('-entity_id', 'id').first()
+                if not entity_position:
+                    raise EntityPosition.DoesNotExist()
         except (ValueError, EntityInstance.DoesNotExist, EntityPosition.DoesNotExist):
             raise Http404( request )
 

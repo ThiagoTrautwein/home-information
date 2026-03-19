@@ -11,7 +11,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage, FileSystemStorage
 from django.db import transaction
 
-from hi.apps.entity.models import Entity, EntityPosition, EntityPath, EntityView
+from hi.apps.entity.models import Entity, EntityInstance, EntityPosition, EntityPath, EntityView
 from hi.apps.entity.enums import EntityType
 from hi.apps.location.models import Location, LocationView
 from hi.apps.location.enums import LocationViewType, SvgStyleName
@@ -412,6 +412,7 @@ class ProfileManager:
                                             location_lookup   : Dict[str, Location] ):
         position_count = 0
         path_count = 0
+        default_entity_instance_by_entity_id = dict()
         
         for entity_data in entity_data_list:
             if PC.ENTITY_FIELD_NAME not in entity_data:
@@ -421,9 +422,27 @@ class ProfileManager:
             
             for position_data in entity_data.get(PC.ENTITY_FIELD_POSITIONS, []):
                 location = location_lookup[position_data[PC.COMMON_FIELD_LOCATION_NAME]]
-                
+
+                entity_instance_id = position_data.get( 'entity_instance_id' )
+                if entity_instance_id is not None:
+                    entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                        id = int( entity_instance_id ),
+                        entity = entity,
+                    )
+                else:
+                    entity_instance = default_entity_instance_by_entity_id.get( entity.id )
+                    if not entity_instance:
+                        entity_instance = entity.instances.order_by( 'id' ).first()
+                    if not entity_instance:
+                        entity_instance = EntityInstance.objects.create(
+                            entity = entity,
+                            share_states = True,
+                        )
+                    default_entity_instance_by_entity_id[entity.id] = entity_instance
+
                 EntityPosition.objects.create(
-                    entity = entity,
+                    entity = None,
+                    entity_instance = entity_instance,
                     location = location,
                     svg_x = Decimal(str(position_data[PC.COMMON_FIELD_SVG_X])),
                     svg_y = Decimal(str(position_data[PC.COMMON_FIELD_SVG_Y])),
@@ -738,6 +757,8 @@ class ProfileManager:
                                                   location_lookup: Dict[str, Location],
                                                   stats: ProfileLoadingStats):
         """Create entity positions and paths with error tracking and graceful failure handling."""
+        default_entity_instance_by_entity_id = dict()
+
         for entity_data in entity_data_list:
             if PC.ENTITY_FIELD_NAME not in entity_data:
                 continue
@@ -757,9 +778,27 @@ class ProfileManager:
                         raise ValueError(f'Location "{location_name}" not found')
                     
                     location = location_lookup[location_name]
-                    
+
+                    entity_instance_id = position_data.get( 'entity_instance_id' )
+                    if entity_instance_id is not None:
+                        entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                            id = int( entity_instance_id ),
+                            entity = entity,
+                        )
+                    else:
+                        entity_instance = default_entity_instance_by_entity_id.get( entity.id )
+                        if not entity_instance:
+                            entity_instance = entity.instances.order_by( 'id' ).first()
+                        if not entity_instance:
+                            entity_instance = EntityInstance.objects.create(
+                                entity = entity,
+                                share_states = True,
+                            )
+                        default_entity_instance_by_entity_id[entity.id] = entity_instance
+
                     EntityPosition.objects.create(
-                        entity = entity,
+                        entity = None,
+                        entity_instance = entity_instance,
                         location = location,
                         svg_x = Decimal(str(position_data[PC.COMMON_FIELD_SVG_X])),
                         svg_y = Decimal(str(position_data[PC.COMMON_FIELD_SVG_Y])),
