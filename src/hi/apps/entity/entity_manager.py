@@ -65,16 +65,27 @@ class EntityManager(Singleton):
     def get_entity_edit_mode_data( self,
                                    entity         : Entity,
                                    location_view  : LocationView,
-                                   is_editing     : bool )        -> EntityEditModeData:
+                                   is_editing     : bool,
+                                   entity_instance_id : int = None )        -> EntityEditModeData:
 
         entity_position_form = None
+        selected_entity_instance_id = None
         if is_editing and location_view:
-            entity_position = EntityPosition.objects.filter(
-                entity = entity,
-                entity_instance = None,
-                location = location_view.location,
-            ).first()
+            if entity_instance_id:
+                entity_position = EntityPosition.objects.filter(
+                    entity = None,
+                    entity_instance_id = entity_instance_id,
+                    location = location_view.location,
+                ).first()
+            else:
+                entity_position = EntityPosition.objects.filter(
+                    entity = entity,
+                    entity_instance = None,
+                    location = location_view.location,
+                ).first()
+
             if entity_position:
+                selected_entity_instance_id = entity_position.entity_instance_id
                 entity_position_form = EntityPositionForm(
                     location_view.location.svg_position_bounds,
                     instance = entity_position,
@@ -85,6 +96,7 @@ class EntityManager(Singleton):
         return EntityEditModeData(
             entity = entity,
             entity_position_form = entity_position_form,
+            entity_instance_id = selected_entity_instance_id,
             entity_pairing_list = entity_pairing_list,
         )
 

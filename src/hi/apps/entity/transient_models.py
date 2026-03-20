@@ -65,6 +65,7 @@ class EntityEditModeData:
     entity                : Entity
     entity_form           : EntityForm             = None
     entity_position_form  : EntityPositionForm     = None
+    entity_instance_id    : int                    = None
     entity_pairing_list   : List[ EntityPairing ]  = None
 
     def __post_init__(self):
@@ -78,6 +79,7 @@ class EntityEditModeData:
             'entity': self.entity,
             'entity_form': self.entity_form,
             'entity_position_form': self.entity_position_form,
+            'entity_instance_id': self.entity_instance_id,
             'entity_pairing_list': self.entity_pairing_list,
         }
 

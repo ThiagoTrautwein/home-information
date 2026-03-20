@@ -731,6 +731,16 @@ class TestLocationItemEditModeView(SyncViewTestCase):
         expected_url = reverse('entity_edit_mode', kwargs={'entity_id': self.entity.id})
         self.assertEqual(response.url, expected_url)
 
+    def test_entity_edit_mode_redirect_with_instance_id(self):
+        """Test redirecting to entity edit mode preserving entity instance id."""
+        html_id = f'hi-entity-{self.entity.id}-c'
+        url = reverse('location_item_edit_mode', kwargs={'html_id': html_id})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        expected_url = reverse('entity_edit_mode', kwargs={'entity_id': self.entity.id})
+        self.assertEqual(response.url, f'{expected_url}?entity_instance_id=3')
+
     def test_collection_edit_mode_redirect(self):
         """Test redirecting to collection edit mode for collection items."""
         from hi.enums import ItemType

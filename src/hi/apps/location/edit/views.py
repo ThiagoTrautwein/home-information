@@ -94,6 +94,15 @@ class LocationViewEditModeView( HiSideView, LocationViewMixin, LocationEditViewM
 
 class LocationItemEditModeView( View ):
 
+    def _decode_entity_instance_id(self, html_id: str):
+        m = re.match( r'^hi-entity-\d+-([a-z]+)$', html_id or '' )
+        if not m:
+            return None
+        value = 0
+        for c in m.group(1):
+            value = ( value * 26 ) + ( ord(c) - ord('a') + 1 )
+        return value
+
     def get(self, request, *args, **kwargs):
         try:
             ( item_type, item_id ) = ItemType.parse_from_dict( kwargs )
@@ -102,6 +111,9 @@ class LocationItemEditModeView( View ):
         
         if item_type == ItemType.ENTITY:
             redirect_url = reverse( 'entity_edit_mode', kwargs = { 'entity_id': item_id } )
+            entity_instance_id = self._decode_entity_instance_id( kwargs.get( ItemType.HTML_ID_ARG() ))
+            if entity_instance_id:
+                redirect_url = f'{redirect_url}?entity_instance_id={entity_instance_id}'
             return HttpResponseRedirect( redirect_url )
     
         if item_type == ItemType.COLLECTION:

@@ -104,6 +104,15 @@ class EntityInstanceAddView( View, EntityViewMixin ):
 
 class EntityEditModeView( HiSideView, EntityViewMixin ):
 
+    def _get_entity_instance_id( self, request : HttpRequest, **kwargs: Any ) -> Optional[int]:
+        value = kwargs.get( 'entity_instance_id' ) or request.GET.get( 'entity_instance_id' )
+        if value in [None, '']:
+            return None
+        try:
+            return int( value )
+        except (TypeError, ValueError):
+            raise BadRequest( 'Invalid entity instance id.' )
+
     def get_template_name( self ) -> str:
         return 'entity/edit/panes/entity_edit_mode_panel.html'
 
@@ -115,7 +124,7 @@ class EntityEditModeView( HiSideView, EntityViewMixin ):
                               *args   : Any,
                               **kwargs: Any          ) -> Dict[str, Any]:
         entity: Entity = self.get_entity( request, *args, **kwargs )
-
+        entity_instance_id = self._get_entity_instance_id( request, **kwargs )
         current_location_view = None
         if request.view_parameters.view_type.is_location_view:
             current_location_view = LocationManager().get_default_location_view( request = request )
@@ -124,6 +133,7 @@ class EntityEditModeView( HiSideView, EntityViewMixin ):
             entity = entity,
             location_view = current_location_view,
             is_editing = request.view_parameters.is_editing,
+            entity_instance_id = entity_instance_id,
         )
         return entity_edit_mode_data.to_template_context()
 

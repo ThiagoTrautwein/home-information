@@ -29,15 +29,19 @@ class EditViewHelpers:
         in_view_ids = set(EntityView.objects.values_list('entity_id', flat=True))
 
         # Get entities that have position or path records
-        positioned_ids = {
-            entity_id
-            for direct_entity_id, instance_entity_id in EntityPosition.objects.values_list(
-                'entity_id',
-                'entity_instance__entity_id',
-            )
-            for entity_id in (direct_entity_id, instance_entity_id)
-            if entity_id is not None
-        }
+        positioned_ids = set()
+        entity_position_qs = EntityPosition.objects.values_list(
+            'entity_id',
+            'entity_instance__entity_id',
+        )
+
+        for entity_id, entity_instance_entity_id in entity_position_qs:
+            if entity_id is not None:
+                positioned_ids.add(entity_id)
+
+            if entity_instance_entity_id is not None:
+                positioned_ids.add(entity_instance_entity_id)
+                
         pathed_ids = set(EntityPath.objects.values_list('entity_id', flat=True))
         has_location_data_ids = positioned_ids | pathed_ids
 
