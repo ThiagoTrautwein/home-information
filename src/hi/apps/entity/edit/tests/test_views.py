@@ -1,5 +1,6 @@
 import logging
 
+from django.db.models import Q
 from django.urls import reverse
 
 from hi.apps.collection.collection_manager import CollectionManager
@@ -9,7 +10,7 @@ from hi.apps.entity.edit.views import ManagePairingsView
 from hi.apps.entity.entity_manager import EntityManager
 from hi.apps.entity.entity_pairing_manager import EntityPairingManager
 from hi.apps.entity.enums import EntityType
-from hi.apps.entity.models import Entity, EntityPosition, EntityStateDelegation
+from hi.apps.entity.models import Entity, EntityInstance, EntityPosition, EntityStateDelegation
 from hi.apps.location.enums import LocationViewType
 from hi.apps.location.location_manager import LocationManager
 from hi.apps.location.models import Location, LocationView
@@ -154,8 +155,8 @@ class TestEntityAddView(DualModeViewTestCase):
         # The real managers should handle this integration
         self.assertEqual(EntityPosition.objects.count(), initial_position_count + 1)
         
-        # Verify the EntityPosition links the entity to the location
-        entity_position = EntityPosition.objects.get(entity=new_entity)
+        # Verify the EntityPosition links the entity (or its primary instance) to the location
+        entity_position = EntityPosition.objects.for_entity( new_entity ).get()
         self.assertEqual(entity_position.location, self.location_view.location)
 
     def test_post_valid_form_collection_view(self):
@@ -240,7 +241,7 @@ class TestEntityAddView(DualModeViewTestCase):
         
         # Verify no EntityPosition was created since no location view exists
         self.assertFalse(
-            EntityPosition.objects.filter(entity=new_entity).exists(),
+            EntityPosition.objects.for_entity(new_entity).exists(),
             "No EntityPosition should be created when no location view available"
         )
 
@@ -376,13 +377,17 @@ class TestEntityPositionEditView(SyncViewTestCase):
             name='Test Entity',
             entity_type_str=str(EntityType.LIGHT)
         )
-        self.entity_position = EntityPosition.objects.create(
-            entity=self.entity,
-            location=self.location,
-            svg_x=50.0,
-            svg_y=50.0,
-            svg_rotate=0.0,
-            svg_scale=1.0
+        self.entity_instance = EntityInstance.objects.create(
+            entity = self.entity,
+            share_states = True,
+        )
+        self.entity_position = EntityPosition.objects.create_for_entity_instance(
+            entity_instance = self.entity_instance,
+            location = self.location,
+            svg_x = 50.0,
+            svg_y = 50.0,
+            svg_rotate = 0.0,
+            svg_scale = 1.0,
         )
 
     def test_post_valid_position_edit(self):
@@ -399,7 +404,7 @@ class TestEntityPositionEditView(SyncViewTestCase):
         self.assertEqual(response.status_code, 200)
         
         # Verify the entity position was actually updated in the database
-        updated_position = EntityPosition.objects.get(entity=self.entity)
+        updated_position = EntityPosition.objects.for_entity( self.entity ).get()
         self.assertEqual(float(updated_position.svg_x), 60.0)
         self.assertEqual(float(updated_position.svg_y), 70.0)
 
@@ -418,7 +423,7 @@ class TestEntityPositionEditView(SyncViewTestCase):
         self.assertEqual(response.status_code, 200)
         
         # Verify the entity position was NOT updated (should remain original values)
-        unchanged_position = EntityPosition.objects.get(entity=self.entity)
+        unchanged_position = EntityPosition.objects.for_entity( self.entity ).get()
         self.assertEqual(float(unchanged_position.svg_x), 50.0)  # Original value
         self.assertEqual(float(unchanged_position.svg_y), 50.0)  # Original value
 

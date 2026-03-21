@@ -179,38 +179,20 @@ class LocationManager(Singleton):
             
             # Only collect position OR path based on EntityType, not both
             if entity.entity_type.requires_position():
-                entity_position = entity.positions.filter( location = location ).first()
-                if entity_position:
-                    is_visible = True
-                    entity_positions.append( entity_position )
-                    displayed_entities.add( entity )
-
-                # Also collect positions for EntityInstances of this entity
-                instance_positions = EntityPosition.objects.filter(
-                    entity_instance__entity = entity,
-                    entity_instance__isnull = False,
+                position_queryset = EntityPosition.objects.for_entity( entity ).filter(
                     location = location,
                 ).select_related( 'entity_instance__entity' )
-                for instance_position in instance_positions:
-                    entity_positions.append( instance_position )
+                for entity_position in position_queryset:
+                    entity_positions.append( entity_position )
                     displayed_entities.add( entity )
                     is_visible = True
 
             elif entity.entity_type.requires_path():
-                entity_path = entity.paths.filter( location = location ).first()
-                if entity_path:
-                    is_visible = True
-                    entity_paths.append( entity_path )
-                    displayed_entities.add( entity )
-
-                # Also collect paths for EntityInstances of this entity
-                instance_paths = EntityPath.objects.filter(
-                    entity_instance__entity = entity,
-                    entity_instance__isnull = False,
+                path_queryset = EntityPath.objects.for_entity( entity ).filter(
                     location = location,
                 ).select_related( 'entity_instance__entity' )
-                for instance_path in instance_paths:
-                    entity_paths.append( instance_path )
+                for entity_path in path_queryset:
+                    entity_paths.append( entity_path )
                     displayed_entities.add( entity )
                     is_visible = True
             

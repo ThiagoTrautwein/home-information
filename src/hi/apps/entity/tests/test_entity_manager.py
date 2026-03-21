@@ -2,8 +2,10 @@ import logging
 from decimal import Decimal
 from unittest.mock import Mock
 
+from django.db.models import Q
+
 from hi.apps.entity.entity_manager import EntityManager
-from hi.apps.entity.models import Entity, EntityPath, EntityPosition
+from hi.apps.entity.models import Entity, EntityInstance, EntityPath, EntityPosition
 from hi.apps.entity.enums import EntityGroupType, EntityType
 from hi.testing.base_test_case import BaseTestCase
 
@@ -102,7 +104,11 @@ class TestEntityManager(BaseTestCase):
                 svg_path_str=svg_path_str
             )
             
-            self.assertEqual(entity_path.entity, entity)
+            path_entity = entity_path.entity
+            if not path_entity and entity_path.entity_instance:
+                path_entity = entity_path.entity_instance.entity
+
+            self.assertEqual(path_entity, entity)
             self.assertEqual(entity_path.location, location)
             self.assertEqual(entity_path.svg_path, svg_path_str)
             
@@ -131,8 +137,13 @@ class TestEntityManager(BaseTestCase):
             
             # Create initial path
             initial_path = 'M 10 10 L 20 20'
-            entity_path = EntityPath.objects.create(
+            entity_instance = EntityInstance.objects.create(
                 entity=entity,
+                share_states=True,
+            )
+            entity_path = EntityPath.objects.create(
+                entity=None,
+                entity_instance=entity_instance,
                 location=location,
                 svg_path=initial_path
             )
@@ -152,7 +163,9 @@ class TestEntityManager(BaseTestCase):
             self.assertEqual(updated_entity_path.svg_path, updated_path)
             
             # Should only be one EntityPath for this entity/location
-            path_count = EntityPath.objects.filter(entity=entity, location=location).count()
+            path_count = EntityPath.objects.for_entity( entity ).filter(
+                location=location,
+            ).count()
             self.assertEqual(path_count, 1)
             
         except ImportError:
@@ -303,7 +316,10 @@ class TestEntityManager(BaseTestCase):
             )
             
             # Verify creation
-            self.assertEqual(entity_path.entity, entity)
+            path_entity = entity_path.entity
+            if not path_entity and entity_path.entity_instance:
+                path_entity = entity_path.entity_instance.entity
+            self.assertEqual(path_entity, entity)
             self.assertEqual(entity_path.location, location)
             self.assertEqual(entity_path.svg_path, initial_path)
             initial_id = entity_path.id
@@ -321,7 +337,9 @@ class TestEntityManager(BaseTestCase):
             self.assertEqual(updated_entity_path.svg_path, updated_path)
             
             # Verify only one EntityPath exists for this entity/location
-            path_count = EntityPath.objects.filter(entity=entity, location=location).count()
+            path_count = EntityPath.objects.for_entity( entity ).filter(
+                location=location,
+            ).count()
             self.assertEqual(path_count, 1)
             
         except ImportError:
@@ -362,7 +380,11 @@ class TestEntityManager(BaseTestCase):
             expected_x = Decimal('300')  # 100 + 400/2
             expected_y = Decimal('350')  # 200 + 300/2
             
-            self.assertEqual(entity_position.entity, entity)
+            position_entity = entity_position.entity
+            if not position_entity and entity_position.entity_instance:
+                position_entity = entity_position.entity_instance.entity
+
+            self.assertEqual(position_entity, entity)
             self.assertEqual(entity_position.location, location)
             self.assertEqual(entity_position.svg_x, expected_x)
             self.assertEqual(entity_position.svg_y, expected_y)
@@ -375,8 +397,7 @@ class TestEntityManager(BaseTestCase):
                 location_view=location_view
             )
             
-            position_count = EntityPosition.objects.filter(
-                entity=entity, 
+            position_count = EntityPosition.objects.for_entity( entity ).filter(
                 location=location
             ).count()
             self.assertEqual(position_count, 1)

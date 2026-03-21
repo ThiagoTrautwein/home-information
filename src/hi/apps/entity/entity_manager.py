@@ -72,17 +72,15 @@ class EntityManager(Singleton):
         selected_entity_instance_id = None
         if is_editing and location_view:
             if entity_instance_id:
-                entity_position = EntityPosition.objects.filter(
-                    entity = None,
-                    entity_instance_id = entity_instance_id,
+                entity_position = EntityPosition.objects.for_entity_instance(
+                    entity_instance_id,
+                ).filter(
                     location = location_view.location,
                 ).first()
             else:
-                entity_position = EntityPosition.objects.filter(
-                    entity = entity,
-                    entity_instance = None,
+                entity_position = EntityPosition.objects.for_entity( entity ).filter(
                     location = location_view.location,
-                ).first()
+                ).with_owner_priority().first()
 
             if entity_position:
                 selected_entity_instance_id = entity_position.entity_instance_id
@@ -122,24 +120,29 @@ class EntityManager(Singleton):
                     entity_path.save()
                     return entity_path
                 except EntityPath.DoesNotExist:
-                    return EntityPath.objects.create(
-                        entity = None,
+                    return EntityPath.objects.create_for_entity_instance(
                         entity_instance = entity_instance,
                         location = location,
                         svg_path = svg_path_str,
                     )
 
             try:
-                entity_path = EntityPath.objects.select_related( 'entity', 'entity_instance' ).get(
+                entity_path = EntityPath.objects.select_related( 'entity', 'entity_instance' ).for_entity(
+                    entity_id
+                ).filter(
                     location = location,
-                    entity_id = entity_id,
-                )
+                ).with_owner_priority().first()
+                if not entity_path:
+                    raise EntityPath.DoesNotExist
                 entity_path.svg_path = svg_path_str
                 entity_path.save()
                 return entity_path
             except EntityPath.DoesNotExist:
-                return EntityPath.objects.create(
-                    entity_id = entity_id,
+                entity_instance = self._get_or_create_primary_entity_instance(
+                    entity = Entity.objects.get( id = entity_id ),
+                )
+                return EntityPath.objects.create_for_entity_instance(
+                    entity_instance = entity_instance,
                     location = location,
                     svg_path = svg_path_str,
                 )
@@ -237,22 +240,19 @@ class EntityManager(Singleton):
         location = location_view.location
 
         if entity_instance:
-            existing_position = EntityPosition.objects.filter(
+            existing_position = EntityPosition.objects.for_entity_instance(
+                entity_instance,
+            ).filter(
                 location = location,
-                entity = None,
-                entity_instance = entity_instance,
             ).first()
             if existing_position:
                 return existing_position
         else:
             # Legacy fallback for pre-migration records, plus already-created
             # instance-owned positions for this root entity.
-            existing_position = EntityPosition.objects.filter(
+            existing_position = EntityPosition.objects.for_entity( entity ).filter(
                 location = location,
-            ).filter(
-                Q(entity = entity, entity_instance = None)
-                | Q(entity = None, entity_instance__entity = entity)
-            ).order_by('-entity_id', 'id').first()
+            ).with_owner_priority().first()
             if existing_position:
                 return existing_position
 
@@ -262,8 +262,7 @@ class EntityManager(Singleton):
         svg_x = location_view.svg_view_box.x + ( location_view.svg_view_box.width / 2.0 )
         svg_y = location_view.svg_view_box.y + ( location_view.svg_view_box.height / 2.0 )
         
-        entity_position = EntityPosition.objects.create(
-            entity = None,
+        entity_position = EntityPosition.objects.create_for_entity_instance(
             entity_instance = entity_instance,
             location = location_view.location,
             svg_x = Decimal( svg_x ),
@@ -286,14 +285,11 @@ class EntityManager(Singleton):
                                    entity          : Entity,
                                    location_view   : LocationView,
                                    is_path_closed  : bool         ) -> EntityPath:
-        try:
-            _ = EntityPath.objects.get(
-                location = location_view.location,
-                entity = entity,
-            )
-            return
-        except EntityPath.DoesNotExist:
-            pass
+        existing_path = EntityPath.objects.for_entity( entity ).filter(
+            location = location_view.location,
+        ).with_owner_priority().first()
+        if existing_path:
+            return existing_path
 
         # Create default path geometry using utility function
         svg_path = PathGeometry.create_default_path_string(
@@ -301,8 +297,9 @@ class EntityManager(Singleton):
             is_path_closed=is_path_closed,
             entity_type=entity.entity_type,
         )        
-        entity_path = EntityPath.objects.create(
-            entity = entity,
+        entity_instance = self._get_or_create_primary_entity_instance( entity )
+        entity_path = EntityPath.objects.create_for_entity_instance(
+            entity_instance = entity_instance,
             location = location_view.location,
             svg_path = svg_path,
         )
@@ -324,16 +321,12 @@ class EntityManager(Singleton):
         entity_type = entity.entity_type
         
         # Check current state in database
-        entity_position = EntityPosition.objects.filter(
+        entity_position = EntityPosition.objects.for_entity( entity ).filter(
             location = location_view.location,
-        ).filter(
-            Q(entity = entity, entity_instance = None)
-            | Q(entity = None, entity_instance__entity = entity)
-        ).order_by('-entity_id', 'id').first()
-        entity_path = EntityPath.objects.filter(
-            entity = entity,
+        ).with_owner_priority().first()
+        entity_path = EntityPath.objects.for_entity( entity ).filter(
             location = location_view.location,
-        ).first()
+        ).with_owner_priority().first()
         
         has_position = bool(entity_position)
         has_path = bool(entity_path)
@@ -444,11 +437,19 @@ class EntityManager(Singleton):
         
         # Preserve EntityPosition and create/update EntityPath
         # This allows easy reversion when users change their mind
-        entity_path, created = EntityPath.objects.get_or_create(
-            entity = entity,
+        entity_path = EntityPath.objects.for_entity( entity ).filter(
             location = location_view.location,
-            defaults = {'svg_path': svg_path}
-        )
+        ).with_owner_priority().first()
+
+        created = False
+        if not entity_path:
+            entity_instance = self._get_or_create_primary_entity_instance( entity )
+            entity_path = EntityPath.objects.create_for_entity_instance(
+                entity_instance = entity_instance,
+                location = location_view.location,
+                svg_path = svg_path,
+            )
+            created = True
         
         if not created:
             # EntityPath already exists - preserve existing geometry
@@ -472,18 +473,14 @@ class EntityManager(Singleton):
         
         # Preserve EntityPath and create/update EntityPosition
         # This allows easy reversion when users change their mind
-        entity_position = EntityPosition.objects.filter(
+        entity_position = EntityPosition.objects.for_entity( entity ).filter(
             location = location_view.location,
-        ).filter(
-            Q(entity = entity, entity_instance = None)
-            | Q(entity = None, entity_instance__entity = entity)
-        ).order_by('-entity_id', 'id').first()
+        ).with_owner_priority().first()
 
         created = False
         if not entity_position:
             entity_instance = self._get_or_create_primary_entity_instance( entity )
-            entity_position = EntityPosition.objects.create(
-                entity = None,
+            entity_position = EntityPosition.objects.create_for_entity_instance(
                 entity_instance = entity_instance,
                 location = location_view.location,
                 svg_x = Decimal(center_x),

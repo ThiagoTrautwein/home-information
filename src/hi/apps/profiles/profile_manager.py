@@ -440,8 +440,7 @@ class ProfileManager:
                         )
                     default_entity_instance_by_entity_id[entity.id] = entity_instance
 
-                EntityPosition.objects.create(
-                    entity = None,
+                EntityPosition.objects.create_for_entity_instance(
                     entity_instance = entity_instance,
                     location = location,
                     svg_x = Decimal(str(position_data[PC.COMMON_FIELD_SVG_X])),
@@ -454,9 +453,27 @@ class ProfileManager:
             
             for path_data in entity_data.get(PC.ENTITY_FIELD_PATHS, []):
                 location = location_lookup[path_data[PC.COMMON_FIELD_LOCATION_NAME]]
+
+                entity_instance_id = path_data.get( 'entity_instance_id' )
+                if entity_instance_id is not None:
+                    entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                        id = int( entity_instance_id ),
+                        entity = entity,
+                    )
+                else:
+                    entity_instance = default_entity_instance_by_entity_id.get( entity.id )
+                    if not entity_instance:
+                        entity_instance = entity.instances.order_by( 'id' ).first()
+                    if not entity_instance:
+                        entity_instance = EntityInstance.objects.create(
+                            entity = entity,
+                            share_states = True,
+                        )
+                    default_entity_instance_by_entity_id[entity.id] = entity_instance
                 
                 EntityPath.objects.create(
-                    entity = entity,
+                    entity = None,
+                    entity_instance = entity_instance,
                     location = location,
                     svg_path = path_data[PC.COMMON_FIELD_SVG_PATH],
                 )
@@ -796,8 +813,7 @@ class ProfileManager:
                             )
                         default_entity_instance_by_entity_id[entity.id] = entity_instance
 
-                    EntityPosition.objects.create(
-                        entity = None,
+                    EntityPosition.objects.create_for_entity_instance(
                         entity_instance = entity_instance,
                         location = location,
                         svg_x = Decimal(str(position_data[PC.COMMON_FIELD_SVG_X])),
@@ -821,9 +837,26 @@ class ProfileManager:
                         raise ValueError(f'Location "{location_name}" not found')
                     
                     location = location_lookup[location_name]
+                    entity_instance_id = path_data.get( 'entity_instance_id' )
+                    if entity_instance_id is not None:
+                        entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                            id = int( entity_instance_id ),
+                            entity = entity,
+                        )
+                    else:
+                        entity_instance = default_entity_instance_by_entity_id.get( entity.id )
+                        if not entity_instance:
+                            entity_instance = entity.instances.order_by( 'id' ).first()
+                        if not entity_instance:
+                            entity_instance = EntityInstance.objects.create(
+                                entity = entity,
+                                share_states = True,
+                            )
+                        default_entity_instance_by_entity_id[entity.id] = entity_instance
                     
                     EntityPath.objects.create(
-                        entity = entity,
+                        entity = None,
+                        entity_instance = entity_instance,
                         location = location,
                         svg_path = path_data[PC.COMMON_FIELD_SVG_PATH],
                     )

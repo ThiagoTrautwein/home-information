@@ -413,6 +413,87 @@ class EntityStateDelegation(models.Model):
                 name = 'entity_state_delegation_uniqueness',
             ),
         ]
+
+
+class EntityOwnedLocationItemQuerySet( models.QuerySet ):
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        entity_id = entity_or_id.id if hasattr( entity_or_id, 'id' ) else int( entity_or_id )
+        return self.filter(
+            (
+                models.Q( entity_id = entity_id )
+                & models.Q( entity_instance__isnull = True )
+            )
+            | (
+                models.Q( entity__isnull = True )
+                & models.Q( entity_instance__entity_id = entity_id )
+            )
+        )
+
+    def with_owner_priority( self ):
+        # Prefer legacy direct-owner rows if both representations exist.
+        return self.order_by( '-entity_id', 'id' )
+
+    def for_entity_instance( self, entity_instance_or_id: Union[EntityInstance, int] ):
+        entity_instance_id = ( entity_instance_or_id.id
+                               if hasattr( entity_instance_or_id, 'id' )
+                               else int( entity_instance_or_id ) )
+        return self.filter(
+            entity = None,
+            entity_instance_id = entity_instance_id,
+        )
+
+
+class EntityPositionManager( models.Manager ):
+
+    def get_queryset( self ):
+        return EntityOwnedLocationItemQuerySet( self.model, using = self._db )
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        return self.get_queryset().for_entity( entity_or_id )
+
+    def for_entity_instance( self, entity_instance_or_id: Union[EntityInstance, int] ):
+        return self.get_queryset().for_entity_instance( entity_instance_or_id )
+
+    def create_for_entity_instance( self,
+                                    entity_instance: EntityInstance,
+                                    location: Location,
+                                    svg_x,
+                                    svg_y,
+                                    svg_scale,
+                                    svg_rotate ):
+        return self.create(
+            entity = None,
+            entity_instance = entity_instance,
+            location = location,
+            svg_x = svg_x,
+            svg_y = svg_y,
+            svg_scale = svg_scale,
+            svg_rotate = svg_rotate,
+        )
+
+
+class EntityPathManager( models.Manager ):
+
+    def get_queryset( self ):
+        return EntityOwnedLocationItemQuerySet( self.model, using = self._db )
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        return self.get_queryset().for_entity( entity_or_id )
+
+    def for_entity_instance( self, entity_instance_or_id: Union[EntityInstance, int] ):
+        return self.get_queryset().for_entity_instance( entity_instance_or_id )
+
+    def create_for_entity_instance( self,
+                                    entity_instance: EntityInstance,
+                                    location: Location,
+                                    svg_path: str ):
+        return self.create(
+            entity = None,
+            entity_instance = entity_instance,
+            location = location,
+            svg_path = svg_path,
+        )
     
     
 class EntityPosition( LocationItemPositionModel ):
@@ -453,6 +534,8 @@ class EntityPosition( LocationItemPositionModel ):
         auto_now=True,
         blank = True,
     )
+
+    objects = EntityPositionManager()
 
     class Meta:
         verbose_name = 'Entity Position'
@@ -519,6 +602,8 @@ class EntityPath( LocationItemPathModel ):
         auto_now=True,
         blank = True,
     )
+
+    objects = EntityPathManager()
 
     class Meta:
         verbose_name = 'Entity Path'

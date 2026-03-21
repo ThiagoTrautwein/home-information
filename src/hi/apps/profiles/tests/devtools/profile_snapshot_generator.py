@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional
 
 from django.conf import settings
 
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityPosition, EntityPath
 from hi.apps.location.models import Location
 from hi.apps.collection.models import Collection
 
@@ -260,7 +260,7 @@ class ProfileSnapshotGenerator:
             
             # Add entity positions
             positions = []
-            for position in entity.positions.select_related('location'):
+            for position in EntityPosition.objects.for_entity( entity ).select_related('location'):
                 position_dict = {
                     PC.COMMON_FIELD_LOCATION_NAME: position.location.name,
                     PC.COMMON_FIELD_SVG_X: float(position.svg_x),
@@ -277,7 +277,7 @@ class ProfileSnapshotGenerator:
             
             # Add entity paths
             paths = []
-            for path in entity.paths.select_related('location'):
+            for path in EntityPath.objects.for_entity( entity ).select_related('location'):
                 path_dict = {
                     PC.COMMON_FIELD_LOCATION_NAME: path.location.name,
                     PC.COMMON_FIELD_SVG_PATH: path.svg_path,
@@ -307,12 +307,12 @@ class ProfileSnapshotGenerator:
             return PC.ENTITY_COMMENT_COLLECTION_MEMBER
         
         # Check if entity has paths (EntityPath)
-        if entity.paths.exists() and 'path_entity' not in seen_patterns:
+        if EntityPath.objects.for_entity( entity ).exists() and 'path_entity' not in seen_patterns:
             seen_patterns.add('path_entity')
             return PC.ENTITY_COMMENT_PATH_ENTITY
         
         # Check if entity has positions (EntityPosition) - most common case
-        if entity.positions.exists() and 'icon_positioned' not in seen_patterns:
+        if EntityPosition.objects.for_entity( entity ).exists() and 'icon_positioned' not in seen_patterns:
             seen_patterns.add('icon_positioned')
             return PC.ENTITY_COMMENT_ICON_POSITIONED
         

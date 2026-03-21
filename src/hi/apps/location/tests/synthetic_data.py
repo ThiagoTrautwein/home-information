@@ -11,7 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from hi.constants import DIVID
 from hi.apps.attribute.enums import AttributeType, AttributeValueType
 from hi.apps.location.models import Location, LocationView, LocationAttribute
-from hi.apps.entity.models import Entity, EntityPosition
+from hi.apps.entity.models import Entity, EntityInstance, EntityPosition
 from hi.apps.collection.models import Collection, CollectionPosition
 from hi.apps.entity.enums import EntityType
 from hi.apps.collection.enums import CollectionType, CollectionViewType
@@ -73,12 +73,20 @@ class LocationSyntheticData:
         }
         entity_defaults.update(kwargs)
         entity = Entity.objects.create(**entity_defaults)
+
+        entity_instance = EntityInstance.objects.create(
+            entity = entity,
+            share_states = True,
+        )
         
         # Create position
-        EntityPosition.objects.create(
-            entity=entity,
-            location=location,
-            **position_kwargs
+        EntityPosition.objects.create_for_entity_instance(
+            entity_instance = entity_instance,
+            location = location,
+            svg_x = position_kwargs['svg_x'],
+            svg_y = position_kwargs['svg_y'],
+            svg_rotate = position_kwargs['svg_rotate'],
+            svg_scale = position_kwargs['svg_scale'],
         )
         return entity
     

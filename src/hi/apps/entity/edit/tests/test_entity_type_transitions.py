@@ -6,6 +6,7 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.test import TransactionTestCase
 
 from hi.apps.entity.entity_manager import EntityManager
@@ -45,17 +46,43 @@ class TestEntityTypeTransitions(TransactionTestCase):
             entity_type_str = str(EntityType.LIGHT),  # Start with icon type
         )
         return
+
+    def _entity_path_queryset(self):
+        return EntityPath.objects.for_entity( self.entity )
+
+    def _entity_position_queryset(self):
+        return EntityPosition.objects.for_entity( self.entity )
+
+    def _create_entity_path(self, svg_path: str):
+        entity_instance = self.manager._get_or_create_primary_entity_instance( self.entity )
+        return EntityPath.objects.create(
+            entity = None,
+            entity_instance = entity_instance,
+            location = self.location,
+            svg_path = svg_path,
+        )
+
+    def _create_entity_position(self,
+                                svg_x: Decimal,
+                                svg_y: Decimal,
+                                svg_scale: Decimal = Decimal('1.0'),
+                                svg_rotate: Decimal = Decimal('0')):
+        entity_instance = self.manager._get_or_create_primary_entity_instance( self.entity )
+        return EntityPosition.objects.create_for_entity_instance(
+            entity_instance = entity_instance,
+            location = self.location,
+            svg_x = svg_x,
+            svg_y = svg_y,
+            svg_scale = svg_scale,
+            svg_rotate = svg_rotate,
+        )
     
     def test_icon_to_path_transition_preserves_position(self):
         """Test that icon->path transition preserves EntityPosition"""
         # Create initial position
-        EntityPosition.objects.create(
-            entity = self.entity,
-            location = self.location,
+        self._create_entity_position(
             svg_x = Decimal('500'),
             svg_y = Decimal('300'),
-            svg_scale = Decimal('1.0'),
-            svg_rotate = Decimal('0'),
         )
         
         # Change to path type (WALL is a path type)
@@ -74,23 +101,21 @@ class TestEntityTypeTransitions(TransactionTestCase):
         
         # Verify EntityPosition is preserved
         self.assertTrue(
-            EntityPosition.objects.filter(
-                entity = self.entity,
+            self._entity_position_queryset().filter(
                 location = self.location,
             ).exists()
         )
         
         # Verify EntityPath was created
         self.assertTrue(
-            EntityPath.objects.filter(
-                entity = self.entity,
+            self._entity_path_queryset().filter(
                 location = self.location,
             ).exists()
         )
         
         # Both should coexist
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 1)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 1)
+        self.assertEqual(self._entity_position_queryset().count(), 1)
+        self.assertEqual(self._entity_path_queryset().count(), 1)
         return
     
     def test_path_to_icon_transition_preserves_path(self):
@@ -100,11 +125,7 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.entity.save()
         
         # Create initial path
-        EntityPath.objects.create(
-            entity = self.entity,
-            location = self.location,
-            svg_path = 'M 100,100 L 200,200 L 300,100 Z',
-        )
+        self._create_entity_path( 'M 100,100 L 200,200 L 300,100 Z' )
         
         # Change to icon type
         self.entity.entity_type_str = str(EntityType.LIGHT)
@@ -122,23 +143,24 @@ class TestEntityTypeTransitions(TransactionTestCase):
         
         # Verify EntityPath is preserved
         self.assertTrue(
-            EntityPath.objects.filter(
-                entity = self.entity,
+            self._entity_path_queryset().filter(
                 location = self.location,
             ).exists()
         )
         
         # Verify EntityPosition was created
         self.assertTrue(
-            EntityPosition.objects.filter(
-                entity = self.entity,
+            self._entity_position_queryset().filter(
                 location = self.location,
             ).exists()
         )
         
         # Both should coexist
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 1)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 1)
+        self.assertEqual(
+            self._entity_position_queryset().count(),
+            1,
+        )
+        self.assertEqual(self._entity_path_queryset().count(), 1)
         return
     
     def test_repeated_transitions_preserve_geometry(self):
@@ -146,13 +168,9 @@ class TestEntityTypeTransitions(TransactionTestCase):
         # Create initial position
         original_x = Decimal('123.45')
         original_y = Decimal('678.90')
-        EntityPosition.objects.create(
-            entity = self.entity,
-            location = self.location,
+        self._create_entity_position(
             svg_x = original_x,
             svg_y = original_y,
-            svg_scale = Decimal('1.0'),
-            svg_rotate = Decimal('0'),
         )
         
         # Transition icon->path
@@ -176,8 +194,7 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.assertEqual(transition_type, EntityTransitionType.PATH_TO_ICON)
         
         # Verify original position is preserved
-        entity_position = EntityPosition.objects.get(
-            entity = self.entity,
+        entity_position = self._entity_position_queryset().get(
             location = self.location,
         )
         self.assertEqual(entity_position.svg_x, original_x)
@@ -187,19 +204,11 @@ class TestEntityTypeTransitions(TransactionTestCase):
     def test_both_exist_edge_case(self):
         """Test handling when both EntityPosition and EntityPath already exist"""
         # Create both position and path
-        EntityPosition.objects.create(
-            entity = self.entity,
-            location = self.location,
+        self._create_entity_position(
             svg_x = Decimal('500'),
             svg_y = Decimal('500'),
-            svg_scale = Decimal('1.0'),
-            svg_rotate = Decimal('0'),
         )
-        EntityPath.objects.create(
-            entity = self.entity,
-            location = self.location,
-            svg_path = 'M 0,0 L 100,0',
-        )
+        self._create_entity_path( 'M 0,0 L 100,0' )
         
         # Transition to icon type
         transition_occurred, transition_type = self.manager.handle_entity_type_transition(
@@ -224,20 +233,16 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.assertEqual(transition_type, EntityTransitionType.ICON_TO_PATH)
         
         # Both should still exist
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 1)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 1)
+        self.assertEqual(self._entity_position_queryset().count(), 1)
+        self.assertEqual(self._entity_path_queryset().count(), 1)
         return
     
     def test_icon_to_icon_transition(self):
         """Test transition between two icon types"""
         # Create initial position
-        EntityPosition.objects.create(
-            entity = self.entity,
-            location = self.location,
+        self._create_entity_position(
             svg_x = Decimal('500'),
             svg_y = Decimal('500'),
-            svg_scale = Decimal('1.0'),
-            svg_rotate = Decimal('0'),
         )
         
         # Change to different icon type
@@ -253,8 +258,8 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.assertEqual(transition_type, EntityTransitionType.ICON_TO_ICON)
         
         # Only position should exist
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 1)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 0)
+        self.assertEqual(self._entity_position_queryset().count(), 1)
+        self.assertEqual(self._entity_path_queryset().count(), 0)
         return
     
     def test_path_to_path_transition(self):
@@ -264,11 +269,7 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.entity.save()
         
         # Create initial path
-        EntityPath.objects.create(
-            entity = self.entity,
-            location = self.location,
-            svg_path = 'M 0,0 L 100,100',
-        )
+        self._create_entity_path( 'M 0,0 L 100,100' )
         
         # Change to different path type
         self.entity.entity_type_str = str(EntityType.FENCE)
@@ -283,8 +284,8 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.assertEqual(transition_type, EntityTransitionType.PATH_TO_PATH)
         
         # Only path should exist
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 0)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 1)
+        self.assertEqual(self._entity_position_queryset().count(), 0)
+        self.assertEqual(self._entity_path_queryset().count(), 1)
         return
     
     def test_no_location_view_returns_false(self):
@@ -352,7 +353,7 @@ class TestEntityTypeTransitions(TransactionTestCase):
         self.assertEqual(self.entity.entity_type_str, original_type)
         
         # Verify no orphaned EntityPosition/EntityPath records created
-        self.assertEqual(EntityPosition.objects.filter(entity=self.entity).count(), 0)
-        self.assertEqual(EntityPath.objects.filter(entity=self.entity).count(), 0)
+        self.assertEqual(self._entity_position_queryset().count(), 0)
+        self.assertEqual(self._entity_path_queryset().count(), 0)
         return
 

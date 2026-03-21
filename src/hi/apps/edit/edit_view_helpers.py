@@ -42,7 +42,19 @@ class EditViewHelpers:
             if entity_instance_entity_id is not None:
                 positioned_ids.add(entity_instance_entity_id)
                 
-        pathed_ids = set(EntityPath.objects.values_list('entity_id', flat=True))
+        pathed_ids = set()
+        entity_path_qs = EntityPath.objects.values_list(
+            'entity_id',
+            'entity_instance__entity_id',
+        )
+
+        for entity_id, entity_instance_entity_id in entity_path_qs:
+            if entity_id is not None:
+                pathed_ids.add(entity_id)
+
+            if entity_instance_entity_id is not None:
+                pathed_ids.add(entity_instance_entity_id)
+
         has_location_data_ids = positioned_ids | pathed_ids
 
         # Potentially visible = in a view AND has location data
@@ -74,10 +86,8 @@ class EditViewHelpers:
             return not has_collection
 
         # Has view, check if has location data
-        has_position = EntityPosition.objects.filter(
-            Q(entity_id=entity_id) | Q(entity_instance__entity_id=entity_id)
-        ).exists()
-        has_path = EntityPath.objects.filter(entity_id=entity_id).exists()
+        has_position = EntityPosition.objects.for_entity( entity_id ).exists()
+        has_path = EntityPath.objects.for_entity( entity_id ).exists()
 
         if has_position or has_path:
             return False  # Potentially visible

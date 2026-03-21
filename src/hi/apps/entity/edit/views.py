@@ -71,31 +71,27 @@ class EntityInstanceAddView( View, EntityViewMixin ):
                 location = current_location_view.location
 
                 if entity.entity_type.requires_position():
-                    source_position = EntityPosition.objects.filter(
-                        Q(entity = entity) | Q(entity_instance__entity = entity),
+                    source_position = EntityPosition.objects.for_entity( entity ).filter(
                         location = location,
-                    ).order_by('-entity_id', 'id').first()
+                    ).with_owner_priority().first()
                     if source_position:
                         offset_x, offset_y = self._get_grid_offset( existing_instance_count )
-                        EntityPosition.objects.create(
-                            location = location,
-                            entity = None,
+                        EntityPosition.objects.create_for_entity_instance(
                             entity_instance = entity_instance,
+                            location = location,
                             svg_x = source_position.svg_x + offset_x,
                             svg_y = source_position.svg_y + offset_y,
                             svg_scale = source_position.svg_scale,
                             svg_rotate = source_position.svg_rotate,
                         )
                 elif entity.entity_type.requires_path():
-                    source_path = EntityPath.objects.filter(
-                        entity = entity,
+                    source_path = EntityPath.objects.for_entity( entity ).filter(
                         location = location,
-                    ).first()
+                    ).with_owner_priority().first()
                     if source_path:
-                        EntityPath.objects.create(
-                            location = location,
-                            entity = None,
+                        EntityPath.objects.create_for_entity_instance(
                             entity_instance = entity_instance,
+                            location = location,
                             svg_path = source_path.svg_path,
                         )
 
@@ -243,17 +239,17 @@ class EntityPositionEditView( View, EntityViewMixin ):
                     id = int( entity_instance_id ),
                     entity = entity,
                 )
-                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).get(
-                    entity_instance = entity_instance,
+                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).for_entity_instance(
+                    entity_instance,
+                ).get(
                     location = location,
                 )
             else:
-                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).filter(
-                    location = location,
+                entity_position = EntityPosition.objects.select_related( 'entity', 'entity_instance' ).for_entity(
+                    entity
                 ).filter(
-                    Q(entity = entity, entity_instance = None)
-                    | Q(entity = None, entity_instance__entity = entity)
-                ).order_by('-entity_id', 'id').first()
+                    location = location,
+                ).with_owner_priority().first()
                 if not entity_position:
                     raise EntityPosition.DoesNotExist()
         except (ValueError, EntityInstance.DoesNotExist, EntityPosition.DoesNotExist):

@@ -713,8 +713,7 @@ class TestLocationItemPositionView(SyncViewTestCase):
         
         # Verify position was updated in database
         from hi.apps.entity.models import EntityPosition
-        position = EntityPosition.objects.get(
-            entity=entity_with_position,
+        position = EntityPosition.objects.for_entity( entity_with_position ).get(
             location=location
         )
         self.assertEqual(position.svg_x, 200.0)
@@ -838,8 +837,7 @@ class TestLocationItemPathView(SyncViewTestCase):
         # Verify entity path was set in the database
         # Check if EntityPath model exists to verify path was saved
         from hi.apps.entity.models import EntityPath
-        entity_path = EntityPath.objects.filter(
-            entity=self.entity,
+        entity_path = EntityPath.objects.for_entity( self.entity ).filter(
             location=self.location
         ).first()
         self.assertIsNotNone(entity_path)

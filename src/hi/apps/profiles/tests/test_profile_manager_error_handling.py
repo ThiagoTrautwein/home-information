@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 from hi.apps.profiles.profile_manager import ProfileManager, ProfileLoadingStats
-from hi.apps.entity.models import Entity, EntityPosition
+from hi.apps.entity.models import Entity, EntityInstance, EntityPosition
 from hi.apps.location.models import Location
 from hi.testing.base_test_case import BaseTestCase
 
@@ -357,13 +357,17 @@ class TestProfileManagerErrorHandling(BaseTestCase):
         )
         
         # Verify we can create valid relationships
-        position = EntityPosition.objects.create(
-            entity=entity,
-            location=location,
-            svg_x=10.0,
-            svg_y=20.0,
-            svg_scale=1.0,
-            svg_rotate=0.0
+        entity_instance = EntityInstance.objects.create(
+            entity = entity,
+            share_states = True,
+        )
+        position = EntityPosition.objects.create_for_entity_instance(
+            entity_instance = entity_instance,
+            location = location,
+            svg_x = 10.0,
+            svg_y = 20.0,
+            svg_scale = 1.0,
+            svg_rotate = 0.0,
         )
         
         # Verify database state
@@ -372,5 +376,5 @@ class TestProfileManagerErrorHandling(BaseTestCase):
         self.assertEqual(EntityPosition.objects.count(), 1)
         
         # Verify foreign key relationships work
-        self.assertEqual(position.entity, entity)
+        self.assertEqual(position.entity_instance.entity, entity)
         self.assertEqual(position.location, location)
