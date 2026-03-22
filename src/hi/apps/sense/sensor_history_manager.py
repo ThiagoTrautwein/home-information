@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List
 
 from hi.apps.common.singleton import Singleton
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityState
 
 from .models import Sensor, SensorHistory
 from .transient_models import SensorResponse
@@ -85,7 +85,7 @@ class SensorHistoryManager( Singleton ):
                                           entity     : Entity,
                                           max_items  : int    = 5 ) -> Dict[ Sensor, List[ SensorHistory ] ]:
 
-        entity_state_list = list( entity.states.all() )
+        entity_state_list = list( EntityState.objects.for_entity( entity ) )
         entity_state_delegations = entity.entity_state_delegations.select_related('entity_state').all()
         entity_state_list.extend([ x.entity_state for x in entity_state_delegations ])
 

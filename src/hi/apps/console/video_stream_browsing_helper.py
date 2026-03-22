@@ -12,7 +12,7 @@ from django.core.exceptions import BadRequest
 from django.utils import timezone
 from django.urls import resolve, Resolver404
 
-from hi.apps.entity.models import Entity, EntityState
+from hi.apps.entity.models import Entity, EntityInstance, EntityState
 from hi.apps.sense.models import Sensor, SensorHistory
 from hi.apps.sense.transient_models import SensorResponse
 
@@ -29,7 +29,9 @@ class VideoStreamBrowsingHelper:
     SENSOR_STATE_TYPE_PRIORITY = ConsoleManager.STATUS_ENTITY_STATE_PRIORITY
     
     @classmethod
-    def find_video_sensor_for_entity( cls, entity: Entity ) -> Optional[Sensor]:
+    def find_video_sensor_for_entity( cls,
+                                      entity: Entity,
+                                      entity_instance: EntityInstance = None ) -> Optional[Sensor]:
         """
         Find the first sensor with video capability for an entity.
         Uses priority order to select the best sensor and optimizes queries.
@@ -39,11 +41,14 @@ class VideoStreamBrowsingHelper:
         
         # Fetch all entity states with their sensors in a single query
         # Using select_related and prefetch_related to minimize database hits
-        entity_states = EntityState.objects.filter(
-            entity=entity
-        ).prefetch_related(
-            'sensors'
-        )
+        if entity_instance:
+            entity_states = EntityState.objects.for_entity_instance( entity_instance ).prefetch_related(
+                'sensors'
+            )
+        else:
+            entity_states = EntityState.objects.for_entity( entity ).prefetch_related(
+                'sensors'
+            )
         
         # Build a map of state types to their sensors for efficient lookup
         state_type_to_sensors: Dict[str, List[Sensor]] = {}

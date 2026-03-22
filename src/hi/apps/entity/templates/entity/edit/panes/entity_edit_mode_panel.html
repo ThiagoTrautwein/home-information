@@ -32,7 +32,11 @@
     <label class="form-check-label" for="hi-share-states">Share states with original</label>
   </div>
   <button type="submit" class="btn btn-sm btn-primary btn-block btn-control">
+    {% if entity_instance_id %}
+    UPDATE INSTANCE
+    {% else %}
     ADD INSTANCE
+    {% endif %}
   </button>
 </form>
 

@@ -69,7 +69,7 @@ class EntityManager(Singleton):
                                    entity_instance_id : int = None )        -> EntityEditModeData:
 
         entity_position_form = None
-        selected_entity_instance_id = None
+        selected_entity_instance_id = entity_instance_id
         if is_editing and location_view:
             if entity_instance_id:
                 entity_position = EntityPosition.objects.for_entity_instance(
@@ -90,7 +90,7 @@ class EntityManager(Singleton):
                 )
 
         entity_pairing_list = EntityPairingManager().get_entity_pairing_list( entity = entity )
-        
+
         return EntityEditModeData(
             entity = entity,
             entity_position_form = entity_position_form,

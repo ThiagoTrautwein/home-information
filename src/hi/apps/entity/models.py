@@ -106,7 +106,7 @@ class Entity( IntegrationDetailsModel, LocationItemModelMixin ):
         )
 
         if not share_states:
-            for entity_state in self.states.all():
+            for entity_state in EntityState.objects.for_entity( self ):
                 entity_state.clone_for_entity_instance( entity_instance )
 
         return entity_instance
@@ -166,9 +166,62 @@ class EntityInstance( models.Model ):
         return self
 
     def get_states(self):
-        if self.share_states:
-            return self.entity.states.all()
-        return self.states.all()
+        return EntityState.objects.for_entity_instance( self )
+
+
+class EntityOwnedStateQuerySet( models.QuerySet ):
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        entity_id = entity_or_id.id if hasattr( entity_or_id, 'id' ) else int( entity_or_id )
+        return self.filter(
+            entity_id = entity_id,
+            entity_instance__isnull = True,
+        )
+
+    def for_entity_instance( self, entity_instance_or_id: Union[EntityInstance, int] ):
+        entity_instance = entity_instance_or_id
+        if not hasattr( entity_instance_or_id, 'id' ):
+            try:
+                entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                    id = int( entity_instance_or_id ),
+                )
+            except ( TypeError, ValueError, EntityInstance.DoesNotExist ):
+                return self.none()
+
+        if entity_instance.share_states:
+            return self.for_entity( entity_instance.entity_id )
+
+        return self.filter(
+            entity = None,
+            entity_instance_id = entity_instance.id,
+        )
+
+
+class EntityStateManager( models.Manager ):
+
+    def get_queryset( self ):
+        return EntityOwnedStateQuerySet( self.model, using = self._db )
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        return self.get_queryset().for_entity( entity_or_id )
+
+    def for_entity_instance( self, entity_instance_or_id: Union[EntityInstance, int] ):
+        return self.get_queryset().for_entity_instance( entity_instance_or_id )
+
+    def create_for_entity_instance( self,
+                                    entity_instance: EntityInstance,
+                                    entity_state_type_str: str,
+                                    name: str,
+                                    value_range_str: str = None,
+                                    units: str = None ):
+        return self.create(
+            entity = None,
+            entity_instance = entity_instance,
+            entity_state_type_str = entity_state_type_str,
+            name = name,
+            value_range_str = value_range_str,
+            units = units,
+        )
 
         
 class EntityState( models.Model ):
@@ -217,6 +270,8 @@ class EntityState( models.Model ):
         'Created',
         auto_now_add = True,
     )
+
+    objects = EntityStateManager()
     
     class Meta:
         verbose_name = 'Entity State'
@@ -331,8 +386,7 @@ class EntityState( models.Model ):
         return actual_value
 
     def clone_for_entity_instance( self, entity_instance : EntityInstance ) -> 'EntityState':
-        return EntityState.objects.create(
-            entity = None,
+        return EntityState.objects.create_for_entity_instance(
             entity_instance = entity_instance,
             entity_state_type_str = self.entity_state_type_str,
             name = self.name,

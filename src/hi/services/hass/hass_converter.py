@@ -524,7 +524,7 @@ class HassConverter:
             #
             entiity_sensors = dict()
             entiity_controllers = dict()
-            for entity_state in entity.states.all():
+            for entity_state in EntityState.objects.for_entity( entity ):
                 entiity_sensors.update({ x.integration_key: x for x in entity_state.sensors.all() })
                 entiity_controllers.update({ x.integration_key: x for x in entity_state.controllers.all() })
                 continue

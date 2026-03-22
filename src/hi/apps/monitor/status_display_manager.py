@@ -1,10 +1,10 @@
 from cachetools import TTLCache
-from typing import Dict, List, Set, Sequence
+from typing import Dict, List, Optional, Set, Sequence
 
 from hi.apps.control.transient_models import ControllerData
 from hi.apps.common.singleton import Singleton
 from hi.apps.entity.enums import EntityStateType
-from hi.apps.entity.models import Entity, EntityState
+from hi.apps.entity.models import Entity, EntityInstance, EntityState
 from hi.apps.location.models import LocationView
 from hi.apps.location.svg_item_factory import SvgItemFactory
 from hi.apps.sense.models import Sensor
@@ -92,17 +92,24 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
 
         return entity_state_status_data_list
 
-    def get_entity_status_data( self, entity : Entity ) -> EntityStatusData:
+    def get_entity_status_data( self,
+                                entity : Entity,
+                                entity_instance : Optional[EntityInstance] = None ) -> EntityStatusData:
 
         # The set of entity states used to define the state includes the
         # principals when the entity is a delegate.
         #
+        root_entity = entity_instance.entity if entity_instance else entity
+
         entity_for_video = None
-        if entity.has_video_stream:
-            entity_for_video = entity
-            
-        entity_state_set = set( entity.states.all() )
-        for entity_state_delegation in entity.entity_state_delegations.all():
+        if root_entity.has_video_stream:
+            entity_for_video = root_entity
+
+        if entity_instance:
+            entity_state_set = set( EntityState.objects.for_entity_instance( entity_instance ) )
+        else:
+            entity_state_set = set( EntityState.objects.for_entity( entity ) )
+        for entity_state_delegation in root_entity.entity_state_delegations.all():
             entity_state_set.add( entity_state_delegation.entity_state )
             if ( not entity_for_video
                  and entity_state_delegation.entity_state.root_entity.has_video_stream ):
@@ -118,7 +125,7 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
             entity = entity,
         )
         return EntityStatusData(
-            entity = entity,
+            entity = root_entity,
             entity_state_status_data_list = list( entity_state_to_status_data.values() ),
             entity_for_video = entity_for_video,  # Possibly principal entity via delegation
             display_only_svg_icon_item = svg_icon_item,
@@ -169,7 +176,10 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
         # Gather all EntityStates for all Entities so we can issue a single
         # fetch of the latest SensorResponses.
         #
-        entity_to_entity_state_set = { x: set( x.states.all() ) for x in entities }
+        entity_to_entity_state_set = {
+            x: set( EntityState.objects.for_entity( x ) )
+            for x in entities
+        }
         all_entity_states = set()
         for entity, entity_state_set in entity_to_entity_state_set.items():
             all_entity_states.update( entity_state_set )
@@ -332,7 +342,8 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
     def get_entity_state_list_for_status(
             self,
             entity                           : Entity,
-            entity_state_type_priority_list  : List[ EntityStateType ] ) -> List[ EntityState ]:
+            entity_state_type_priority_list  : List[ EntityStateType ],
+            entity_instance                 : Optional[EntityInstance] = None ) -> List[ EntityState ]:
         """
         Finds all EntityState for the highest priority EntityStateType.
         """
@@ -340,9 +351,14 @@ class StatusDisplayManager( Singleton, SensorResponseMixin ):
         # Delegate entities include will include all their principal entity
         # states, though any direct state will take precendence
 
-        delegations_queryset = entity.entity_state_delegations.select_related('entity_state').all()
+        root_entity = entity_instance.entity if entity_instance else entity
+
+        delegations_queryset = root_entity.entity_state_delegations.select_related('entity_state').all()
         all_entity_states = [ x.entity_state for x in delegations_queryset ]
-        all_entity_states.extend( entity.states.all() )
+        if entity_instance:
+            all_entity_states.extend( EntityState.objects.for_entity_instance( entity_instance ) )
+        else:
+            all_entity_states.extend( EntityState.objects.for_entity( entity ) )
 
         # Gather all possible EntityStateType for the Entity and its principals.
         entity_state_list_map = dict()

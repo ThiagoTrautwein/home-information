@@ -3,7 +3,7 @@ from typing import Optional
 
 from hi.apps.control.controller_manager import ControllerManager
 from hi.apps.control.models import Controller
-from hi.apps.entity.models import Entity, EntityState
+from hi.apps.entity.models import Entity, EntityInstance, EntityState
 from hi.apps.location.enums import LocationViewType
 from hi.apps.monitor.status_display_manager import StatusDisplayManager
 
@@ -40,6 +40,7 @@ class OneClickControlService:
     def execute_one_click_control(
             self,
             entity              : Entity,
+            entity_instance     : EntityInstance = None,
             location_view_type  : LocationViewType  = None ) -> ControllerOutcome:
         """
         Execute complete one-click control flow: decision, state detection, execution.
@@ -48,6 +49,7 @@ class OneClickControlService:
         """
         controller = self._find_controller(
             entity = entity,
+            entity_instance = entity_instance,
             location_view_type = location_view_type,
         )
         current_value = self._get_current_state_value(
@@ -66,6 +68,7 @@ class OneClickControlService:
     
     def _find_controller( self,
                           entity              : Entity,
+                          entity_instance     : EntityInstance = None,
                           location_view_type  : LocationViewType  = None ) -> Controller:
         """Find highest priority EntityState that has controllers and is supported.
 
@@ -81,6 +84,7 @@ class OneClickControlService:
         entity_state_list = StatusDisplayManager().get_entity_state_list_for_status(
             entity = entity,
             entity_state_type_priority_list = priority_list,
+            entity_instance = entity_instance,
         )
 
         for entity_state in entity_state_list:

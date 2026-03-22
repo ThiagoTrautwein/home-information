@@ -9,7 +9,7 @@ All methods are purely analytical and perform no database operations.
 import logging
 from typing import Set
 
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityState
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class EntityUserDataDetector:
             Set of sensor IDs that have integration keys and should be removed
         """
         sensor_ids = set()
-        for state in entity.states.all():
+        for state in EntityState.objects.for_entity( entity ):
             integration_sensors = state.sensors.filter(
                 integration_id__isnull=False
             )
@@ -82,7 +82,7 @@ class EntityUserDataDetector:
             Set of controller IDs that have integration keys and should be removed
         """
         controller_ids = set()
-        for state in entity.states.all():
+        for state in EntityState.objects.for_entity( entity ):
             integration_controllers = state.controllers.filter(
                 integration_id__isnull=False
             )
@@ -107,7 +107,7 @@ class EntityUserDataDetector:
         """
         orphaned_state_ids = set()
         
-        for state in entity.states.all():
+        for state in EntityState.objects.for_entity( entity ):
             # Check if state will have any remaining sensors
             remaining_sensors = state.sensors.exclude(
                 id__in=removed_sensor_ids

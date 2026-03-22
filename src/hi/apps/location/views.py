@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 from django.core.exceptions import BadRequest
@@ -15,7 +16,7 @@ from hi.apps.control.one_click_control_service import (
     OneClickError,
     OneClickNotSupported,
 )
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityInstance
 from hi.apps.entity.view_mixins import EntityViewMixin
 from hi.apps.monitor.status_display_manager import StatusDisplayManager
 from hi.enums import ItemType, ViewType
@@ -103,6 +104,15 @@ class LocationSwitchView( View, LocationViewMixin ):
 
 class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
 
+    def _decode_entity_instance_id(self, html_id: str):
+        m = re.match( r'^hi-entity-\d+-([a-z]+)$', html_id or '' )
+        if not m:
+            return None
+        value = 0
+        for c in m.group(1):
+            value = ( value * 26 ) + ( ord(c) - ord('a') + 1 )
+        return value
+
     def get(self, request, *args, **kwargs):
         try:
             ( item_type, item_id ) = ItemType.parse_from_dict( kwargs )
@@ -111,7 +121,18 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
         
         if item_type == ItemType.ENTITY:
             entity = self.get_entity( request, entity_id = item_id )
-            return self._handle_entity( request = request, entity = entity )
+            entity_instance = None
+            entity_instance_id = self._decode_entity_instance_id( kwargs.get( ItemType.HTML_ID_ARG() ) )
+            if entity_instance_id:
+                entity_instance = EntityInstance.objects.select_related( 'entity' ).filter(
+                    id = entity_instance_id,
+                    entity_id = entity.id,
+                ).first()
+            return self._handle_entity(
+                request = request,
+                entity = entity,
+                entity_instance = entity_instance,
+            )
     
         elif item_type == ItemType.COLLECTION:
             url = reverse( 'collection_view', kwargs = { 'collection_id': item_id } )
@@ -119,7 +140,10 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
         
         raise BadRequest( f'Unknown item type "{item_type}".' )
         
-    def _handle_entity(self, request : HttpRequest, entity : Entity ):
+    def _handle_entity(self,
+                       request : HttpRequest,
+                       entity : Entity,
+                       entity_instance : EntityInstance = None ):
         
         location_view_id = request.view_parameters.location_view_id
         location_view = LocationView.objects.get( id = location_view_id )
@@ -128,11 +152,13 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
             return self._entity_status_response(
                 request = request,
                 entity = entity,
+                entity_instance = entity_instance,
             )
         try:
             logger.debug( f'Trying one-click: {entity}' )
             controller_outcome = OneClickControlService().execute_one_click_control(
                 entity = entity,
+                entity_instance = entity_instance,
                 location_view_type = location_view.location_view_type,
             )
             if controller_outcome.has_errors:
@@ -146,12 +172,16 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
                 entity_state = controller_outcome.controller.entity_state,
                 override_value = override_sensor_value,
             )
-            return self.get_entity_svg_update_reponse( entity = entity )
+            return self.get_entity_svg_update_reponse(
+                entity = entity,
+                entity_instance = entity_instance,
+            )
 
         except OneClickNotSupported:
             return self._entity_status_response(
                 request = request,
                 entity = entity,
+                entity_instance = entity_instance,
             )
             
         except OneClickError as e:
@@ -167,8 +197,13 @@ class LocationItemStatusView( View, LocationViewMixin, EntityViewMixin ):
                 status = 500,
             )
 
-    def _entity_status_response( self, request : HttpRequest, entity : Entity ):
+    def _entity_status_response( self,
+                                 request : HttpRequest,
+                                 entity : Entity,
+                                 entity_instance : EntityInstance = None ):
         url = reverse( 'entity_status', kwargs = { 'entity_id': entity.id } )
+        if entity_instance:
+            url = f'{url}?entity_instance_id={entity_instance.id}'
         return HttpResponseRedirect( url )
             
         

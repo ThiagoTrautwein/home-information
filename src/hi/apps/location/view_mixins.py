@@ -1,8 +1,10 @@
+from typing import Optional
+
 from django.core.exceptions import BadRequest
 from django.http import Http404, HttpResponse
 
 import hi.apps.common.antinode as antinode
-from hi.apps.entity.models import Entity
+from hi.apps.entity.models import Entity, EntityInstance
 from hi.apps.location.location_manager import LocationManager
 from hi.apps.location.models import Location, LocationView
 from hi.apps.monitor.status_display_data import StatusDisplayData
@@ -41,11 +43,14 @@ class LocationViewMixin:
         except LocationView.DoesNotExist:
             raise Http404( request )
 
-    def get_entity_svg_update_reponse( self, entity : Entity ) -> HttpResponse:
+    def get_entity_svg_update_reponse( self,
+                                       entity : Entity,
+                                       entity_instance : Optional[EntityInstance] = None ) -> HttpResponse:
         """ For updating a single entity in the location view vis antinode reponse """
 
         entity_status_data = StatusDisplayManager().get_entity_status_data(
             entity = entity,
+            entity_instance = entity_instance,
         )
         set_attributes_map = dict()
         for entity_state_status_data in entity_status_data.entity_state_status_data_list:

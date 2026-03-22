@@ -12,7 +12,7 @@ from hi.apps.sense.sensor_history_manager import SensorHistoryMixin
 from hi.views import page_not_found_response
 from hi.hi_async_view import HiModalView
 
-from .models import Entity, EntityAttribute
+from .models import Entity, EntityAttribute, EntityInstance
 from .transient_models import EntityStateHistoryData
 from .view_mixins import EntityViewMixin
 from .entity_attribute_edit_context import EntityAttributeItemEditContext
@@ -32,7 +32,21 @@ class EntityStatusView( HiModalView, EntityViewMixin ):
              **kwargs: Any          ) -> HttpResponse:
         entity = self.get_entity( request, *args, **kwargs )
 
-        entity_status_data = StatusDisplayManager().get_entity_status_data( entity = entity )
+        entity_instance = None
+        entity_instance_id = request.GET.get( 'entity_instance_id' )
+        if entity_instance_id:
+            try:
+                entity_instance = EntityInstance.objects.select_related( 'entity' ).get(
+                    id = int( entity_instance_id ),
+                    entity_id = entity.id,
+                )
+            except ( TypeError, ValueError, EntityInstance.DoesNotExist ):
+                entity_instance = None
+
+        entity_status_data = StatusDisplayManager().get_entity_status_data(
+            entity = entity,
+            entity_instance = entity_instance,
+        )
         if not entity_status_data.entity_state_status_data_list:
             return EntityEditView().get( request, *args, **kwargs )
         

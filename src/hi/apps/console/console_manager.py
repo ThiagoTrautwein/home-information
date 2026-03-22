@@ -10,7 +10,7 @@ from hi.constants import DIVID
 from hi.apps.common.singleton import Singleton
 from hi.apps.config.settings_mixins import SettingsMixin
 from hi.apps.entity.entity_manager import EntityManager
-from hi.apps.entity.models import Entity, EntityState
+from hi.apps.entity.models import Entity, EntityInstance, EntityState
 from hi.apps.entity.enums import EntityStateType
 from hi.apps.sense.sensor_response_manager import SensorResponseMixin
 
@@ -109,10 +109,12 @@ class ConsoleManager( Singleton, SettingsMixin, SensorResponseMixin ):
         
         return display_data_list
 
-    def _find_priority_entity_state(self, entity: Entity) -> Optional[EntityState]:
+    def _find_priority_entity_state(self, entity: Entity, entity_instance: EntityInstance = None) -> Optional[EntityState]:
         """Find the highest priority entity state for the given entity."""
-        # Get all states once - benefits from prefetch_related caching
-        entity_states = entity.states.all()
+        if entity_instance:
+            entity_states = EntityState.objects.for_entity_instance( entity_instance )
+        else:
+            entity_states = EntityState.objects.for_entity( entity )
         
         # Process in memory - no additional DB queries
         for state_type in self.STATUS_ENTITY_STATE_PRIORITY:

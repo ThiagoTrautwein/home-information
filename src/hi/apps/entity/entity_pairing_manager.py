@@ -55,11 +55,11 @@ class EntityPairingManager(Singleton):
     
     def get_candidate_entities( self, entity : models.Entity ) -> List[ EntityPairing ]:
         """ We only allow pairing entities with states to those without states.  """
-        entity_has_states = bool( entity.states.exists() )
+        entity_has_states = models.EntityState.objects.for_entity( entity ).exists()
 
         candidate_entity_list = list()
         for candidate_entity in models.Entity.objects.all():
-            candidate_entity_has_states = bool( candidate_entity.states.exists() )
+            candidate_entity_has_states = models.EntityState.objects.for_entity( candidate_entity ).exists()
 
             if (( entity_has_states and not candidate_entity_has_states )
                 or ( not entity_has_states and candidate_entity_has_states )):
@@ -70,7 +70,7 @@ class EntityPairingManager(Singleton):
     
     def get_delegate_entities( self, entity : models.Entity ) -> List[ models.Entity ]:
         delegate_entity_set = set()
-        for entity_state in entity.states.all():
+        for entity_state in models.EntityState.objects.for_entity( entity ):
             for entity_state_delegation in entity_state.entity_state_delegations.all():
                 delegate_entity_set.add( entity_state_delegation.delegate_entity )
                 continue
@@ -109,7 +109,7 @@ class EntityPairingManager(Singleton):
         # Used to make sure we do not create a delegation if it already exists.
         entity_state_to_delegate_entity_map = dict()
         
-        for entity_state in entity.states.all():
+        for entity_state in models.EntityState.objects.for_entity( entity ):
 
             for entity_state_delegation in entity_state.entity_state_delegations.all():
                 entity_state_to_delegate_entity_map[entity_state] = entity_state_delegation.delegate_entity
@@ -195,11 +195,11 @@ class EntityPairingManager(Singleton):
         to_add_entity_ids = desired_paired_entity_ids - previous_paired_entity_ids
         to_delete_entity_ids = previous_paired_entity_ids - desired_paired_entity_ids
         
-        entity_has_states = bool( entity.states.exists() )
+        entity_has_states = models.EntityState.objects.for_entity( entity ).exists()
         to_add_paired_entities = list( models.Entity.objects.filter( id__in = list(to_add_entity_ids) ) )
 
         for candidate_entity in to_add_paired_entities:
-            candidate_entity_has_states = bool( candidate_entity.states.exists() )
+            candidate_entity_has_states = models.EntityState.objects.for_entity( candidate_entity ).exists()
 
             if entity_has_states and candidate_entity_has_states:
                 raise EntityPairingError(
@@ -218,7 +218,7 @@ class EntityPairingManager(Singleton):
                     principle_entity = to_add_entity
                     delegate_entity = entity
                     
-                for entity_state in principle_entity.states.all():
+                for entity_state in models.EntityState.objects.for_entity( principle_entity ):
                     models.EntityStateDelegation.objects.create(
                         entity_state = entity_state,
                         delegate_entity = delegate_entity,
