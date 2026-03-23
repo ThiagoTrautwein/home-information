@@ -17,6 +17,7 @@ from .models import (
     LocationView,
 )
 
+from hi.apps.entity.models import EntityPosition, EntityPath, EntityView
 
 class LocationManager(Singleton):
 
@@ -166,15 +167,21 @@ class LocationManager(Singleton):
                                 location_view                : LocationView,
                                 include_status_display_data  : bool ):
 
-        from hi.apps.entity.models import EntityPosition, EntityPath
-
         location = location_view.location
         entity_positions = list()
         entity_paths = list()
         displayed_entities = set()
         non_displayed_entities = set()
-        for entity_view in location_view.entity_views.select_related('entity').all():
-            entity = entity_view.entity
+        entity_view_qs = location_view.entity_views.all()
+        if EntityView.objects.supports_entity_instance():
+            entity_view_qs = entity_view_qs.select_related( 'entity', 'entity_instance__entity' )
+        else:
+            entity_view_qs = entity_view_qs.select_related( 'entity' )
+
+        for entity_view in entity_view_qs:
+            entity = entity_view.root_entity
+            if not entity:
+                continue
             is_visible = False
             
             # Only collect position OR path based on EntityType, not both

@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from django.db import models
 
@@ -685,6 +685,64 @@ class EntityPath( LocationItemPathModel ):
     def location_item(self) -> LocationItemModelMixin:
         return self.entity_instance if self.entity_instance else self.entity
 
+
+class EntityViewQuerySet( models.QuerySet ):
+
+    def supports_entity_instance( self ) -> bool:
+        return any( field.name == 'entity_instance' for field in self.model._meta.get_fields() )
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        entity_id = entity_or_id.id if hasattr( entity_or_id, 'id' ) else int( entity_or_id )
+
+        if self.supports_entity_instance():
+            return self.filter(
+                models.Q( entity_id = entity_id )
+                | models.Q( entity_instance__entity_id = entity_id )
+            )
+
+        return self.filter( entity_id = entity_id )
+
+    def with_owner_priority( self ):
+        if self.supports_entity_instance():
+            # Prefer legacy direct-owner rows if both representations exist.
+            return self.order_by( '-entity_id', 'id' )
+        return self.order_by( 'id' )
+
+
+class EntityViewManager( models.Manager ):
+
+    def get_queryset( self ):
+        return EntityViewQuerySet( self.model, using = self._db )
+
+    def supports_entity_instance( self ) -> bool:
+        return self.get_queryset().supports_entity_instance()
+
+    def for_entity( self, entity_or_id: Union[Entity, int] ):
+        return self.get_queryset().for_entity( entity_or_id )
+
+    def with_owner_priority( self ):
+        return self.get_queryset().with_owner_priority()
+
+    def _get_or_create_primary_entity_instance( self, entity: Entity ) -> EntityInstance:
+        entity_instance = entity.instances.order_by( 'id' ).first()
+        if entity_instance:
+            return entity_instance
+        return entity.instances.create( share_states = True )
+
+    def create_for_entity( self, entity: Entity, location_view: LocationView ):
+        if self.supports_entity_instance():
+            entity_instance = self._get_or_create_primary_entity_instance( entity )
+            return self.create(
+                entity = None,
+                entity_instance = entity_instance,
+                location_view = location_view,
+            )
+
+        return self.create(
+            entity = entity,
+            location_view = location_view,
+        )
+
     
 class EntityView(models.Model):
 
@@ -705,6 +763,8 @@ class EntityView(models.Model):
         auto_now_add = True,
     )
 
+    objects = EntityViewManager()
+
     class Meta:
         verbose_name = 'Entity View'
         verbose_name_plural = 'Entity Views'
@@ -714,6 +774,17 @@ class EntityView(models.Model):
                 fields = [ 'entity', 'location_view' ],
                 name = 'entity_view_entity_location_view', ),
         ]
+
+    @property
+    def root_entity( self ) -> Optional[Entity]:
+        if self.entity:
+            return self.entity
+
+        entity_instance_id = getattr( self, 'entity_instance_id', None )
+        if entity_instance_id:
+            return self.entity_instance.entity
+
+        return None
 
 
 class EntityAttributeHistory(AttributeValueHistoryModel):

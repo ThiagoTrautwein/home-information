@@ -175,14 +175,11 @@ class EntityPairingManager(Singleton):
             principal_entities = set( self.get_principal_entities( entity = delegate_entity ))
             if (( len(principal_entities) == 1 )
                 and ( next(iter(principal_entities)) == entity )):
-                try:
-                    entity_view = models.EntityView.objects.get(
-                        entity = delegate_entity,
-                        location_view = location_view,
-                    )
+                entity_view = models.EntityView.objects.for_entity( delegate_entity ).filter(
+                    location_view = location_view,
+                ).with_owner_priority().first()
+                if entity_view:
                     entity_view.delete()
-                except models.EntityView.DoesNotExist:
-                    pass
             continue
 
         return

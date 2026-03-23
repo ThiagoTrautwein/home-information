@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional
 
 from django.conf import settings
 
-from hi.apps.entity.models import Entity, EntityPosition, EntityPath
+from hi.apps.entity.models import Entity, EntityPosition, EntityPath, EntityView
 from hi.apps.location.models import Location
 from hi.apps.collection.models import Collection
 
@@ -289,7 +289,7 @@ class ProfileSnapshotGenerator:
             
             # Add visible_in_views
             visible_views = []
-            for view in entity.entity_views.select_related('location_view'):
+            for view in EntityView.objects.for_entity( entity ).select_related( 'location_view' ):
                 visible_views.append(view.location_view.name)
             
             if visible_views:

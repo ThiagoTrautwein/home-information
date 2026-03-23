@@ -164,13 +164,11 @@ class EntityManager(Singleton):
                     entity = entity,
                     location_view = location_view,
                 )
-            try:
-                entity_view = EntityView.objects.get(
-                    entity = entity,
-                    location_view = location_view,
-                )
-            except EntityView.DoesNotExist:
-                entity_view = EntityView.objects.create(
+            entity_view = EntityView.objects.for_entity( entity ).filter(
+                location_view = location_view,
+            ).with_owner_priority().first()
+            if not entity_view:
+                entity_view = EntityView.objects.create_for_entity(
                     entity = entity,
                     location_view = location_view,
                 )
@@ -179,10 +177,11 @@ class EntityManager(Singleton):
     def remove_entity_view( self, entity : Entity, location_view : LocationView ):
 
         with transaction.atomic():
-            entity_view = EntityView.objects.get(
-                entity = entity,
+            entity_view = EntityView.objects.for_entity( entity ).filter(
                 location_view = location_view,
-            )
+            ).with_owner_priority().first()
+            if not entity_view:
+                raise EntityView.DoesNotExist()
             entity_view.delete()
         return
     
@@ -190,7 +189,7 @@ class EntityManager(Singleton):
 
         with transaction.atomic():
             # Only create delegate entities the first time an entity is added to a view.
-            if not entity.entity_views.all().exists():
+            if not EntityView.objects.for_entity( entity ).exists():
                 delegate_entity_list = EntityPairingManager().get_delegate_entities_with_defaults(
                     entity = entity,
                 )
@@ -529,8 +528,15 @@ class EntityManager(Singleton):
     def create_location_entity_view_group_list( self,
                                                 location_view : LocationView,
                                                 unused_entity_ids : set = None ) -> List[EntityViewGroup]:
-        existing_entities = [ x.entity
-                              for x in location_view.entity_views.select_related('entity').all() ]
+        entity_view_qs = location_view.entity_views.all()
+        if EntityView.objects.supports_entity_instance():
+            entity_view_qs = entity_view_qs.select_related( 'entity', 'entity_instance__entity' )
+        else:
+            entity_view_qs = entity_view_qs.select_related( 'entity' )
+
+        existing_entities = [ x.root_entity
+                              for x in entity_view_qs
+                              if x.root_entity ]
         all_entities = Entity.objects.all()
         return self.create_entity_view_group_list(
             existing_entities = existing_entities,

@@ -509,7 +509,7 @@ class ProfileManager:
                         continue
                 
                 if location_view:
-                    EntityView.objects.create(
+                    EntityView.objects.create_for_entity(
                         entity = entity,
                         location_view = location_view,
                     )
@@ -943,7 +943,7 @@ class ProfileManager:
                             continue
                     
                     if location_view:
-                        EntityView.objects.create(
+                        EntityView.objects.create_for_entity(
                             entity = entity,
                             location_view = location_view,
                         )

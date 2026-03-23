@@ -13,6 +13,42 @@ class EditViewHelpers:
     """
 
     @staticmethod
+    def _entity_view_supports_entity_instance() -> bool:
+        return EntityView.objects.supports_entity_instance()
+
+    @staticmethod
+    def _get_entity_view_entity_ids() -> set:
+        """
+        Return root entity IDs referenced by EntityView.
+
+        Prefers entity-instance ownership when supported by schema while
+        retaining compatibility with legacy direct-entity ownership.
+        """
+        in_view_ids = set()
+
+        if EditViewHelpers._entity_view_supports_entity_instance():
+            entity_view_qs = EntityView.objects.values_list(
+                'entity_id',
+                'entity_instance__entity_id',
+            )
+
+            for entity_id, entity_instance_entity_id in entity_view_qs:
+                if entity_id is not None:
+                    in_view_ids.add( entity_id )
+
+                if entity_instance_entity_id is not None:
+                    in_view_ids.add( entity_instance_entity_id )
+
+            return in_view_ids
+
+        # Legacy schema fallback: EntityView owned only by entity.
+        return set( EntityView.objects.values_list( 'entity_id', flat = True ) )
+
+    @staticmethod
+    def _entity_has_any_view( entity_id: int ) -> bool:
+        return EntityView.objects.for_entity( entity_id ).exists()
+
+    @staticmethod
     def get_unused_entity_ids() -> set:
         """
         Return entity IDs that are neither visible in any location view
@@ -26,7 +62,7 @@ class EditViewHelpers:
         This may include some entities that aren't truly visible but is much faster to calculate.
         """
         # Get entities that have EntityView records (are in some view)
-        in_view_ids = set(EntityView.objects.values_list('entity_id', flat=True))
+        in_view_ids = EditViewHelpers._get_entity_view_entity_ids()
 
         # Get entities that have position or path records
         positioned_ids = set()
@@ -79,7 +115,7 @@ class EditViewHelpers:
         More efficient than get_unused_entity_ids() when checking just one entity.
         """
         # Check if entity is in any view
-        has_view = EntityView.objects.filter(entity_id=entity_id).exists()
+        has_view = EditViewHelpers._entity_has_any_view(entity_id)
         if not has_view:
             # No view, but check if in collection
             has_collection = CollectionEntity.objects.filter(entity_id=entity_id).exists()
