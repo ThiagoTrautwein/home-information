@@ -193,6 +193,9 @@ class LocationManager(Singleton):
                 non_displayed_entities.add( entity )
             continue
 
+        # SVG is painted in render order, so later items appear above earlier items.
+        entity_positions.sort( key = lambda item : ( item.z_order_id, item.id ) )
+
         collection_positions = list()
         collection_paths = list()
         unpositioned_collections = list()

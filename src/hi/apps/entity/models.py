@@ -348,6 +348,11 @@ class EntityPosition( LocationItemPositionModel ):
         verbose_name = 'Entity',
         on_delete = models.CASCADE,
     )
+    z_order_id = models.IntegerField(
+        'Z-Order',
+        default = 0,
+        db_index = True,
+    )
     created_datetime = models.DateTimeField(
         'Created',
         auto_now_add = True,

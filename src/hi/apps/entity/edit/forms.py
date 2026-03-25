@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 class EntityPositionForm( LocationItemPositionForm ):
     class Meta( LocationItemPositionForm.Meta ):
         model = EntityPosition
+        fields = LocationItemPositionForm.Meta.fields + (
+            'z_order_id',
+        )
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self.fields['z_order_id'].required = False
+        return
+
+    def clean_z_order_id( self ):
+        z_order_id = self.cleaned_data.get( 'z_order_id' )
+        if z_order_id is None:
+            return getattr( self.instance, 'z_order_id', 0 )
+        return z_order_id
 
 
 class EntityStateSelectModelFormMixin:

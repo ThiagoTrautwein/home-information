@@ -382,7 +382,8 @@ class TestEntityPositionEditView(SyncViewTestCase):
             svg_x=50.0,
             svg_y=50.0,
             svg_rotate=0.0,
-            svg_scale=1.0
+            svg_scale=1.0,
+            z_order_id=0,
         )
 
     def test_post_valid_position_edit(self):
@@ -392,7 +393,8 @@ class TestEntityPositionEditView(SyncViewTestCase):
             'svg_x': '60.0',
             'svg_y': '70.0',
             'svg_rotate': '0.0',
-            'svg_scale': '1.0'
+            'svg_scale': '1.0',
+            'z_order_id': '15',
         })
 
         # Expect antinode.js response (200 with JSON)
@@ -402,6 +404,27 @@ class TestEntityPositionEditView(SyncViewTestCase):
         updated_position = EntityPosition.objects.get(entity=self.entity)
         self.assertEqual(float(updated_position.svg_x), 60.0)
         self.assertEqual(float(updated_position.svg_y), 70.0)
+        self.assertEqual(updated_position.z_order_id, 15)
+
+    def test_post_valid_position_edit_without_z_order_preserves_existing_value(self):
+        """Test POST request remains backward-compatible when z-order is omitted."""
+        self.entity_position.z_order_id = 9
+        self.entity_position.save()
+
+        url = reverse('entity_position_edit', kwargs={'entity_id': self.entity.id})
+        response = self.client.post(url, {
+            'svg_x': '65.0',
+            'svg_y': '75.0',
+            'svg_rotate': '0.0',
+            'svg_scale': '1.0',
+        })
+
+        self.assertEqual(response.status_code, 200)
+
+        updated_position = EntityPosition.objects.get(entity=self.entity)
+        self.assertEqual(float(updated_position.svg_x), 65.0)
+        self.assertEqual(float(updated_position.svg_y), 75.0)
+        self.assertEqual(updated_position.z_order_id, 9)
 
     def test_post_invalid_position_edit(self):
         """Test POST request with invalid position data."""
